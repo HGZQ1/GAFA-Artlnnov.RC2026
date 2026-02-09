@@ -52,6 +52,8 @@ docker run -d \
     -v /dev:/dev \
     -v ~/ros2_vision_project/models:/ros2_ws/models \
     -v ~/ros2_vision_project/data:/ros2_ws/data \
+    -v /usr/lib/aarch64-linux-gnu/librealsense2.so:/usr/lib/aarch64-linux-gnu/librealsense2.so \
+    -v /usr/lib/aarch64-linux-gnu/librealsense2.56.so.2:/usr/lib/aarch64-linux-gnu/librealsense2.so.2.56 \
     -e DISPLAY=:0 \
     ros2-vision-jetson:latest
 ENDSSH

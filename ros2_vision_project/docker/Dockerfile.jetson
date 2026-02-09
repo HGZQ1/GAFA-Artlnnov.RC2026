@@ -23,8 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-vision-msgs \
     ros-humble-image-transport \
     # RealSense 依赖
-    libusb-1.0-0-dev \
-    libssl-dev \
+    # libusb-1.0-0-dev \
+    # libssl-dev \
     # OpenCV
     python3-opencv \
     libopencv-dev \
