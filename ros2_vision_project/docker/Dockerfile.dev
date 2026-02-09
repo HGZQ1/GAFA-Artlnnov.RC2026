@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 安装 RealSense SDK
 # ============================================
 WORKDIR /tmp
-RUN git clone --depth 1 --branch v2.54.2 https://github.com/IntelRealSense/librealsense.git && \
+RUN git clone --depth 1 --branch v2.56 https://github.com/IntelRealSense/librealsense.git && \
     cd librealsense && \
     mkdir build && cd build && \
     cmake .. \

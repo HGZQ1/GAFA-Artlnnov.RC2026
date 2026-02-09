@@ -1,0 +1,21 @@
+# Deep Learning
+ultralytics==8.0.196      # YOLOv8
+torch>=2.0.0              # 由基础镜像提供（Jetson）
+torchvision               # 由基础镜像提供（Jetson）
+
+# Computer Vision
+opencv-python-headless==4.8.1.78
+Pillow==10.0.0
+
+# RealSense
+# pyrealsense2            # 通过源码编译安装
+
+# ROS2 (由基础镜像提供)
+# rclpy
+# cv_bridge
+# sensor_msgs
+# vision_msgs
+
+# Utils
+numpy==1.24.3
+pyyaml==6.0.1

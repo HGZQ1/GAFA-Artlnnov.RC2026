@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  ros2_dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    image: ros2-vision-dev:latest
+    container_name: ros2_vision_dev
+    privileged: true
+    network_mode: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    volumes:
+      # 挂载代码
+      - ../ros2_ws:/ros2_ws
+      - ../models:/ros2_ws/models
+      - ../data:/ros2_ws/data
+      # X11 显示
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # USB 设备（RealSense）
+      - /dev:/dev
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    runtime: nvidia
+    command: bash

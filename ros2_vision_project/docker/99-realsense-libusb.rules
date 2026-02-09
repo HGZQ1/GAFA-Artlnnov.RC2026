@@ -1,0 +1,3 @@
+# Intel RealSense D400 Series
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0ad*", MODE:="0666", GROUP:="plugdev"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0b*", MODE:="0666", GROUP:="plugdev"

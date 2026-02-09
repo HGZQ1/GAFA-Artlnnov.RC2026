@@ -1,7 +1,7 @@
 # ============================================
 # Stage 1: 基础环境（使用 NVIDIA L4T 基础镜像）
 # ============================================
-FROM dustynv/ros:humble-pytorch-l4t-r35.4.1 AS base
+FROM dustynv/ros:humble-pytorch-l4t-r36.2.0 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -38,22 +38,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ============================================
 # Stage 2: 编译 RealSense SDK
 # ============================================
-FROM base AS realsense-builder
+#FROM base AS realsense-builder
 
-WORKDIR /tmp
-RUN git clone --depth 1 --branch v2.54.2 https://github.com/IntelRealSense/librealsense.git && \
-    cd librealsense && \
-    mkdir build && cd build && \
-    cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_EXAMPLES=false \
-        -DBUILD_GRAPHICAL_EXAMPLES=false \
-        -DBUILD_PYTHON_BINDINGS=true \
-        -DPYTHON_EXECUTABLE=/usr/bin/python3 \
-        -DFORCE_RSUSB_BACKEND=ON && \
-    make -j$(nproc) && \
-    make install && \
-    ldconfig
+#WORKDIR /tmp
+# RUN git clone --depth 1 --branch v2.56 https://github.com/IntelRealSense/librealsense.git && \
+#     cd librealsense && \
+#     mkdir build && cd build && \
+#     cmake .. \
+#         -DCMAKE_BUILD_TYPE=Release \
+#         -DBUILD_EXAMPLES=false \
+#         -DBUILD_GRAPHICAL_EXAMPLES=false \
+#         -DBUILD_PYTHON_BINDINGS=true \
+#         -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+#         -DFORCE_RSUSB_BACKEND=ON && \
+#     make -j$(nproc) && \
+#     make install && \
+#     ldconfig
 
 # ============================================
 # Stage 3: Python 依赖层
@@ -61,10 +61,10 @@ RUN git clone --depth 1 --branch v2.54.2 https://github.com/IntelRealSense/libre
 FROM base AS dependencies
 
 # 复制 RealSense SDK
-COPY --from=realsense-builder /usr/local/lib/librealsense* /usr/local/lib/
-COPY --from=realsense-builder /usr/local/lib/python3.10/dist-packages/pyrealsense2* /usr/local/lib/python3.10/dist-packages/
-COPY --from=realsense-builder /usr/local/include/librealsense2 /usr/local/include/librealsense2
-RUN ldconfig
+#COPY --from=realsense-builder /usr/local/lib/librealsense* /usr/local/lib/
+#COPY --from=realsense-builder /usr/local/lib/python3.10/dist-packages/pyrealsense2* /usr/local/lib/python3.10/dist-packages/
+#COPY --from=realsense-builder /usr/local/include/librealsense2 /usr/local/include/librealsense2
+#RUN ldconfig
 
 # 安装 Python 依赖
 COPY requirements.txt /tmp/
