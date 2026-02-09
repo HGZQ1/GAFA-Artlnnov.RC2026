@@ -15,7 +15,7 @@ class DetectorNode(Node):
         super().__init__('yolov8_detector')
         
         # 声明参数
-        self.declare_parameter('model_path', '/ros2_ws/models/yolov8s.pt')
+        self.declare_parameter('model_path', '/ros2_ws/models/yolov8n.pt')
         self.declare_parameter('conf_threshold', 0.25)
         self.declare_parameter('iou_threshold', 0.45)
         self.declare_parameter('device', 'cuda')

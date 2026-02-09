@@ -10,7 +10,7 @@ class YOLOv8Detector:
     
     def __init__(
         self,
-        model_path: str = 'models/yolov8s.pt',
+        model_path: str = 'models/yolov8n.pt',
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45,
         device: str = 'cuda',
