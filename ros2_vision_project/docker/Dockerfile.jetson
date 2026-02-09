@@ -1,0 +1,114 @@
+# ============================================
+# Stage 1: 基础环境（使用 NVIDIA L4T 基础镜像）
+# ============================================
+FROM dustynv/ros:humble-pytorch-l4t-r35.4.1 AS base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    ROS_DISTRO=humble \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+SHELL ["/bin/bash", "-c"]
+
+# ============================================
+# 安装系统依赖
+# ============================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # ROS2 工具
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    ros-humble-cv-bridge \
+    ros-humble-vision-msgs \
+    ros-humble-image-transport \
+    # RealSense 依赖
+    libusb-1.0-0-dev \
+    libssl-dev \
+    # OpenCV
+    python3-opencv \
+    libopencv-dev \
+    # 工具
+    wget \
+    curl \
+    vim \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================
+# Stage 2: 编译 RealSense SDK
+# ============================================
+FROM base AS realsense-builder
+
+WORKDIR /tmp
+RUN git clone --depth 1 --branch v2.54.2 https://github.com/IntelRealSense/librealsense.git && \
+    cd librealsense && \
+    mkdir build && cd build && \
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_EXAMPLES=false \
+        -DBUILD_GRAPHICAL_EXAMPLES=false \
+        -DBUILD_PYTHON_BINDINGS=true \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+        -DFORCE_RSUSB_BACKEND=ON && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig
+
+# ============================================
+# Stage 3: Python 依赖层
+# ============================================
+FROM base AS dependencies
+
+# 复制 RealSense SDK
+COPY --from=realsense-builder /usr/local/lib/librealsense* /usr/local/lib/
+COPY --from=realsense-builder /usr/local/lib/python3.10/dist-packages/pyrealsense2* /usr/local/lib/python3.10/dist-packages/
+COPY --from=realsense-builder /usr/local/include/librealsense2 /usr/local/include/librealsense2
+RUN ldconfig
+
+# 安装 Python 依赖
+COPY requirements.txt /tmp/
+RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+
+# ============================================
+# Stage 4: 应用层
+# ============================================
+FROM dependencies AS application
+
+# 创建工作空间
+WORKDIR /ros2_ws
+
+# 复制 ROS2 工作空间源码
+COPY ros2_ws/src /ros2_ws/src
+
+# 初始化 rosdep
+RUN source /opt/ros/humble/setup.bash && \
+    rosdep update && \
+    rosdep install --from-paths src --ignore-src -r -y || true
+
+# 编译 ROS2 工作空间
+RUN source /opt/ros/humble/setup.bash && \
+    colcon build \
+        --cmake-args -DCMAKE_BUILD_TYPE=Release \
+        --parallel-workers $(nproc)
+
+# 创建模型目录
+RUN mkdir -p /ros2_ws/models
+
+# 设置环境
+RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc && \
+    echo "source /ros2_ws/install/setup.bash" >> ~/.bashrc
+
+# 复制启动脚本
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# 复制 udev 规则
+COPY docker/99-realsense-libusb.rules /etc/udev/rules.d/
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD ros2 node list || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["ros2", "launch", "vision_detection", "detection.launch.py"]
