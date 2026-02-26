@@ -1,0 +1,57 @@
+from ultralytics import YOLO
+#利用相对路径原理，yolo的数据集寻找和运行结果生成都是在当前目录下创建文件夹
+#因此，这里为了区分和方便后续管理，我在ultralytics文件夹下构建了以下目录：
+'''ultralytics-8.3.240
+    |__project
+        |__放代码文件(如train_code)
+        |__datasets
+            |__多种数据集的大文件夹...
+                |__images/labels/yaml文件...
+'''
+#填数据集相对路径，届时替换即可
+data=r"project/datasets/african-wildlife(1)/african-wildlife(1).yaml"
+#训练基本参数：直接影响训练速度和效果
+train_base_para={
+    'epochs':10,
+    'imgsz':640,
+    'batch':16,
+    'cache':'ram',
+    'workers':2,
+}
+#训练超参数：直接影响训练模型性能
+train_hyp_para={
+    'lr0':0.01,
+    'lrf':0.01,
+    'optimizer':'Adam',
+    'momentum':0.937,
+    'weight_decay':0.0005,
+    'box':7.5,
+    'cls':0.5
+}
+#数据增强参数：补充数据不足，增强模型泛化能力
+train_aug_para={
+    #亮度，会取亮图和暗图（亮度为+，暗度为-）
+    'hsv_v':0.4,
+    #旋转角，顺逆时针旋转
+    'degrees':30,
+    #缩放
+    'scale':0.5,
+    #透视
+    'perspective':0.0
+}
+if __name__ == '__main__':
+    #加载模型
+    model=YOLO(r"../yolo11n.pt")
+    model.train(
+        data=data,
+        **train_base_para,
+        **train_hyp_para
+    )
+#这里采用字典解包出所有参数，这里只填了前两个重要的参数字典，若要追加只需用“,”隔开，并在参数字典前附上“**”
+
+'''
+额外说明：关于调参的具体注意事项
+1.尽量每次只调一个参数
+2.具体调整策略另附文档说明
+'''
+
