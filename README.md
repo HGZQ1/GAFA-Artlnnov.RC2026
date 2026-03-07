@@ -21,15 +21,15 @@ ros2_ws/
 │   │   ├── setup.cfg                    # Python 包配置文件
 │   │   ├── setup.py                     # Python 包安装脚本
 │   │   ├── launch/                      # 启动文件目录
-│   │   │   ├── detector.launch.py       # 检测器启动文件
-│   │   │   └── detector_rviz.launch.py  # 检测器 RViz 启动文件
+│   │   │   ├── detector.launch.py       # 检测器启动文件*
+│   │   │   └── detector_rviz.launch.py  # 检测器 RViz 启动文件*
 │   │   ├── rviz/                        # RViz 配置文件目录
 │   │   │   └── detector_view.rviz       # 检测器可视化配置
 │   │   ├── vision_detector/             # Python 源代码目录
 │   │   │   ├── __init__.py              # Python 包初始化文件
-│   │   │   ├── detector_node.py         # 检测器节点主程序
-│   │   │   ├── yolov8_detector.py       # YOLOv8 检测器实现
-│   │   │   ├── utils.py                 # 工具函数
+│   │   │   ├── detector_node.py         # 检测器ROS2节点主程序*
+│   │   │   ├── yolov8_detector.py       # YOLOv8 检测器实现*
+│   │   │   ├── utils.py                 # 工具函数*
 │   │   │   ├── config/                  # 配置文件目录
 │   │   │   └── rviz/                    # RViz 相关文件目录
 │   │   ├── test/                        # 测试文件目录
