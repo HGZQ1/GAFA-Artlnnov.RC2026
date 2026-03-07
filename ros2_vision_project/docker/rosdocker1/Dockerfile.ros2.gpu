@@ -1,0 +1,174 @@
+# YOLOv8-D435i + ROS2 Humble Docker配置 - GPU版本
+# 包含完整的ROS2开发环境 + CUDA支持
+
+FROM nvidia/cuda:12.6.0-cudnn8-devel-ubuntu22.04
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    TZ=Asia/Shanghai \
+    ROS_DISTRO=humble \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=all \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:/opt/ros/humble/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:/opt/ros/humble/lib:$LD_LIBRARY_PATH
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 安装基础依赖和ROS2 Humble
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg2 \
+    lsb-release \
+    software-properties-common \
+    && rm -rf /var/lib/apt/lists/*
+
+# 添加ROS2 APT源
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+    -o /usr/share/keyrings/ros-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+    http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | \
+    tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+# 安装ROS2和系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # ROS2核心
+    ros-humble-desktop-full \
+    # ROS2开发工具
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-vcstool \
+    # 基础工具
+    build-essential \
+    cmake \
+    git \
+    wget \
+    ca-certificates \
+    # Python相关
+    python3-pip \
+    python3-setuptools \
+    python3-dev \
+    # OpenCV依赖
+    libopencv-dev \
+    python3-opencv \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    # GUI支持
+    libglib2.0-0 \
+    libgl1-mesa-glx \
+    libglu1-mesa \
+    libx11-6 \
+    libxext6 \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    # RealSense依赖
+    libusb-1.0-0 \
+    libusb-1.0-0-dev \
+    usbutils \
+    libudev-dev \
+    libssl-dev \
+    libglfw3-dev \
+    libgtk-3-dev \
+    # 其他工具
+    vim \
+    nano \
+    htop \
+    net-tools \
+    iputils-ping \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装ROS2视觉相关包
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Vision messages
+    ros-humble-vision-msgs \
+    # CV Bridge
+    ros-humble-cv-bridge \
+    # Image transport
+    ros-humble-image-transport \
+    ros-humble-image-transport-plugins \
+    # RealSense ROS2
+    ros-humble-librealsense2* \
+    ros-humble-realsense2-camera \
+    ros-humble-realsense2-description \
+    # TF2
+    ros-humble-tf2-ros \
+    ros-humble-tf2-geometry-msgs \
+    # RViz2
+    ros-humble-rviz2 \
+    ros-humble-rviz-common \
+    ros-humble-rviz-default-plugins \
+    # 其他工具
+    ros-humble-rqt* \
+    && rm -rf /var/lib/apt/lists/*
+
+# 添加RealSense APT仓库并安装SDK
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE || \
+    apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE && \
+    add-apt-repository "deb https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" -u && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    librealsense2-dkms \
+    librealsense2-utils \
+    librealsense2-dev \
+    librealsense2-dbg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 升级pip
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# 安装PyTorch with CUDA支持
+RUN pip3 install --no-cache-dir \
+    torch==2.6.0 \
+    torchvision==0.21.0 \
+    torchaudio==2.6.0 \
+    --index-url https://download.pytorch.org/whl/cu126
+
+# 复制requirements文件
+COPY requirements.txt /tmp/requirements.txt
+
+# 安装其他Python依赖
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+
+# 验证CUDA安装
+RUN python3 -c "import torch; print('PyTorch version:', torch.__version__); \
+    print('CUDA available:', torch.cuda.is_available()); \
+    print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A')"
+
+# 初始化rosdep
+RUN rosdep init && rosdep update
+
+# 创建ROS2工作空间
+RUN mkdir -p /root/ros2_ws/src
+
+# 创建非root用户
+RUN useradd -m -u 1000 -s /bin/bash developer && \
+    echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    mkdir -p /home/developer/ros2_ws/src && \
+    chown -R developer:developer /home/developer/ros2_ws
+
+# 设置USB设备权限规则
+RUN echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", MODE="0666"' > /etc/udev/rules.d/99-realsense-libusb.rules && \
+    echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", MODE="0666", GROUP="plugdev"' >> /etc/udev/rules.d/99-realsense-libusb.rules
+
+# 添加用户到必要的组
+RUN usermod -aG video developer && \
+    usermod -aG plugdev developer
+
+# 切换到非root用户
+USER developer
+WORKDIR /home/developer
+
+# 设置ROS2环境（添加到bashrc）
+RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc && \
+    echo "if [ -f ~/ros2_ws/install/setup.bash ]; then source ~/ros2_ws/install/setup.bash; fi" >> ~/.bashrc && \
+    echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc && \
+    echo "export PYTHONPATH=/workspace:\$PYTHONPATH" >> ~/.bashrc
+
+# 默认启动bash
+CMD ["/bin/bash"]

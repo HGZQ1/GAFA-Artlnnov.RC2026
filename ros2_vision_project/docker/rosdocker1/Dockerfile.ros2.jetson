@@ -1,0 +1,192 @@
+# YOLOv8-D435i + ROS2 Humble Docker配置 - Jetson Orin Nano专用
+# 包含完整的ROS2开发环境 + L4T优化
+
+# 注意：此镜像基于L4T，需要在Jetson设备上构建
+FROM dustynv/ros:humble-pytorch-l4t-r36.2.0
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    TZ=Asia/Shanghai \
+    ROS_DISTRO=humble \
+    OPENBLAS_CORETYPE=ARMV8 \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:/opt/ros/humble/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:/opt/ros/humble/lib:$LD_LIBRARY_PATH
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 更新apt源并安装系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # ROS2开发工具
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-vcstool \
+    # 基础工具
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    # OpenCV依赖
+    libopencv-dev \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    # GUI支持
+    libglib2.0-0 \
+    libgl1-mesa-glx \
+    libglu1-mesa \
+    libx11-6 \
+    libxext6 \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    # RealSense依赖
+    libusb-1.0-0 \
+    libusb-1.0-0-dev \
+    usbutils \
+    libudev-dev \
+    libssl-dev \
+    libglfw3-dev \
+    libgtk-3-dev \
+    # 其他工具
+    vim \
+    nano \
+    htop \
+    net-tools \
+    iputils-ping \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装ROS2 Humble
+RUN apt-get update && apt-get install -y \
+    ros-humble-desktop \
+    ros-humble-ros-base \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-vcstool \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# 安装ROS2视觉相关包
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Vision messages
+    ros-humble-vision-msgs \
+    # CV Bridge
+    ros-humble-cv-bridge \
+    # Image transport
+    ros-humble-image-transport \
+    ros-humble-image-transport-plugins \
+    # TF2
+    ros-humble-tf2-ros \
+    ros-humble-tf2-geometry-msgs \
+    # RViz2
+    ros-humble-rviz2 \
+    ros-humble-rviz-common \
+    ros-humble-rviz-default-plugins \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装RealSense SDK for ARM64
+# 注意：Jetson可能需要从源码编译
+RUN apt-get update && \
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-key F6E65AC044F631AC80A06380C8B3A55A6F3EFCDE || \
+    apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE && \
+    add-apt-repository "deb https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" -u && \
+    apt-get install -y --no-install-recommends \
+    librealsense2-dev \
+    librealsense2-utils \
+    || echo "RealSense APT install failed, may need to build from source" && \
+    rm -rf /var/lib/apt/lists/*
+
+# 如果APT安装失败，提供从源码编译的脚本
+RUN if [ ! -f /usr/lib/aarch64-linux-gnu/librealsense2.so ]; then \
+    cd /tmp && \
+    git clone https://github.com/IntelRealSense/librealsense.git && \
+    cd librealsense && \
+    mkdir build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DBUILD_EXAMPLES=true \
+         -DBUILD_GRAPHICAL_EXAMPLES=false && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/librealsense; \
+fi
+
+# 升级pip
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# 安装Jetson专用依赖
+RUN pip3 install --no-cache-dir \
+    # 数据处理
+    numpy \
+    pandas \
+    scipy \
+    # 图像处理
+    Pillow \
+    scikit-image \
+    opencv-python \
+    # 可视化
+    matplotlib \
+    seaborn \
+    # 工具
+    tqdm \
+    pyyaml \
+    requests \
+    # 其他
+    click \
+    omegaconf \
+    loguru \
+    colorama
+
+# 安装pyrealsense2
+RUN pip3 install --no-cache-dir pyrealsense2 || echo "pyrealsense2 installed from apt"
+
+# 安装Ultralytics YOLOv8
+RUN pip3 install --no-cache-dir ultralytics>=8.0.0
+
+# 验证PyTorch和CUDA
+RUN python3 -c "import torch; print('PyTorch version:', torch.__version__); \
+    print('CUDA available:', torch.cuda.is_available()); \
+    print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A')"
+
+# 更新rosdep（如果需要）
+RUN rosdep update || echo "rosdep already initialized"
+
+# 创建ROS2工作空间
+RUN mkdir -p /root/ros2_ws/src
+
+# 创建非root用户
+RUN useradd -m -u 1000 -s /bin/bash developer && \
+    echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    mkdir -p /home/developer/ros2_ws/src && \
+    chown -R developer:developer /home/developer/ros2_ws
+
+# 设置USB设备权限规则
+RUN echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", MODE="0666"' > /etc/udev/rules.d/99-realsense-libusb.rules && \
+    echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", MODE="0666", GROUP="plugdev"' >> /etc/udev/rules.d/99-realsense-libusb.rules
+
+# 添加用户到必要的组
+RUN usermod -aG video developer && \
+    usermod -aG plugdev developer
+
+# 切换到非root用户
+USER developer
+WORKDIR /home/developer
+
+# 设置ROS2环境（添加到bashrc）
+RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc && \
+    echo "if [ -f ~/ros2_ws/install/setup.bash ]; then source ~/ros2_ws/install/setup.bash; fi" >> ~/.bashrc && \
+    echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc && \
+    echo "export PYTHONPATH=/workspace:\$PYTHONPATH" >> ~/.bashrc
+
+# 默认启动bash
+CMD ["/bin/bash"]
+
+# Jetson优化提示
+# 构建后可以使用以下命令优化性能：
+# sudo nvpmodel -m 0  (最大性能模式)
+# sudo jetson_clocks   (锁定最大频率)

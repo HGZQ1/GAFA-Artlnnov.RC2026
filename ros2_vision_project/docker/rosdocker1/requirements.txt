@@ -1,0 +1,102 @@
+# YOLOv5/YOLOv8-D435i 项目依赖
+# Python 3.10+ required
+
+# ===== 深度学习框架 =====
+# PyTorch安装说明：
+# 
+# 注意：PyTorch在Dockerfile中通过pip单独安装，不在requirements.txt中
+# 
+# CUDA 11.8版本（旧版GPU）：
+# pip3 install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu118
+#
+# CUDA 12.6版本（新版GPU，推荐）：
+# pip3 install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
+#
+# CPU版本：
+# pip3 install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+#
+# 如果手动安装，取消下面的注释：
+# torch>=2.0.0
+# torchvision>=0.15.0
+# torchaudio>=2.0.0
+
+# ===== 目标检测 =====
+# YOLOv8 (Ultralytics)
+ultralytics>=8.0.0
+
+# YOLOv5依赖（如果使用YOLOv5）
+# gitpython>=3.1.0
+# ipython>=7.0.0
+# psutil>=5.0.0
+# thop>=0.1.1
+
+# ===== 计算机视觉 =====
+opencv-python>=4.5.0
+opencv-contrib-python>=4.5.0
+
+# ===== RealSense =====
+pyrealsense2>=2.50.0
+
+# ===== 数据处理 =====
+numpy>=1.21.0,<2.0.0
+pandas>=1.3.0
+scipy>=1.7.0
+
+# ===== 图像处理 =====
+Pillow>=9.0.0
+scikit-image>=0.19.0
+
+# ===== 可视化 =====
+matplotlib>=3.5.0
+seaborn>=0.11.0
+plotly>=5.0.0
+
+# ===== 深度学习工具 =====
+# TensorBoard
+tensorboard>=2.10.0
+# ONNX导出
+onnx>=1.12.0
+onnxruntime>=1.12.0
+# onnxruntime-gpu>=1.12.0  # GPU版本
+
+# ===== 性能分析 =====
+tqdm>=4.64.0
+pyyaml>=5.4.0
+requests>=2.27.0
+
+# ===== 数据增强 =====
+albumentations>=1.3.0
+imgaug>=0.4.0
+
+# ===== 工具库 =====
+# 命令行参数解析
+click>=8.0.0
+# 配置文件解析
+omegaconf>=2.2.0
+# 日志
+loguru>=0.6.0
+colorama>=0.4.6
+
+# ===== 可选依赖 =====
+# 目标跟踪
+# filterpy>=1.4.5
+# lap>=0.4.0
+# deep-sort-realtime>=1.3.0
+
+# 模型优化
+# torch-pruning>=1.0.0
+
+# HTTP服务
+# fastapi>=0.95.0
+# uvicorn>=0.22.0
+
+# ===== 开发工具 =====
+# ipython
+# jupyter
+# pytest>=7.0.0
+
+# ===== 版本固定（避免兼容性问题）=====
+# 某些库可能需要特定版本
+setuptools>=65.0.0
+wheel>=0.38.0
+packaging>=21.0
