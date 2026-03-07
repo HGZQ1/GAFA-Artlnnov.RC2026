@@ -6,14 +6,14 @@
 ## 目录树
 
 ```
+ros2_vision_project
+docker/
+│   ├── docker-compose.ros2.yml       # Docker Compose 配置文件
+│   ├── Dockerfile.ros2               # ROS2 CPU 版本 Dockerfile
+│   ├── Dockerfile.ros2.gpu           # ROS2 GPU 版本 Dockerfile
+│   └── Dockerfile.ros2.jetson        # ROS2 Jetson 版本 Dockerfile
 ros2_ws/
 ├── .vscode/                              # VSCode 编辑器配置目录
-├── docker/                               # Docker 环境配置相关目录
-│   └── rosdocker1/                       # Docker ROS2 配置目录
-│       ├── docker-compose.ros2.yml       # Docker Compose 配置文件
-│       ├── Dockerfile.ros2               # ROS2 CPU 版本 Dockerfile
-│       ├── Dockerfile.ros2.gpu           # ROS2 GPU 版本 Dockerfile
-│       └── Dockerfile.ros2.jetson        # ROS2 Jetson 版本 Dockerfile
 ├── src/                                  # ROS2 功能包源码目录
 │   ├── vision_detector/                  # 视觉检测功能包
 │   │   ├── CMakeLists.txt               # CMake 构建配置文件
@@ -49,7 +49,6 @@ ros2_ws/
 │       ├── include/                      # C++ 头文件目录
 │       │   └── vision_msgs_custom/      # 自定义消息头文件
 │       └── src/                         # C++ 源代码目录
-├── docker-compose.yml                    # Docker Compose 配置文件
 ├── yolov8n.pt                            # YOLOv8n 模型权重文件
 ├── test.jpg                              # 视觉测试图片1
 ├── test1.jpg                             # 视觉测试图片2
