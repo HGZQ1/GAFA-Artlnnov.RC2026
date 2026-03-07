@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  vision-detector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ros2-yolov8-d435i:latest
+    container_name: vision_detector
+
+    # GPU配置
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # 网络配置
+    network_mode: host
+
+    # 设备挂载
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+      - /dev/video2:/dev/video2
+      - /dev/video3:/dev/video3
+      - /dev/bus/usb:/dev/bus/usb
+
+    # 卷挂载
+    volumes:
+      # 挂载工作空间
+      - ./src:/ros2_ws/src:rw
+      # 挂载模型权重
+      - ./weights:/ros2_ws/weights:rw
+      # 挂载配置文件
+      - ./config:/ros2_ws/config:rw
+      # X11显示
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # 共享内存
+      - /dev/shm:/dev/shm
+
+    # 环境变量
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ROS_DOMAIN_ID=42
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,display,video
+
+    # 权限配置
+    privileged: true
+
+    # 启动命令
+    command: /bin/bash -c "source /ros2_ws/install/setup.bash && ros2 launch vision_detector detector.launch.py"
+
+    # 重启策略
+    restart: unless-stopped
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "detector_node"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # RViz可视化服务
+  rviz:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ros2-yolov8-d435i:latest
+    container_name: vision_detector_rviz
+
+    # GPU配置
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # 网络配置
+    network_mode: host
+
+    # 卷挂载
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev/shm:/dev/shm
+
+    # 环境变量
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ROS_DOMAIN_ID=42
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,display,video
+
+    # 权限配置
+    privileged: true
+
+    # 启动命令
+    command: /bin/bash -c "source /ros2_ws/install/setup.bash && ros2 run rviz2 rviz2 -d /ros2_ws/install/vision_detector/share/vision_detector/rviz/detector_view.rviz"
+
+    # 依赖关系
+    depends_on:
+      - vision-detector

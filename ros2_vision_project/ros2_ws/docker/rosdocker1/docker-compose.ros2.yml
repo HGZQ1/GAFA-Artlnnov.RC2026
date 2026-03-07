@@ -1,0 +1,174 @@
+version: '3.8'
+
+services:
+  # ROS2 CPU版本
+  yolov8-ros2-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.ros2
+    image: yolov8-d435i:ros2-cpu-latest
+    container_name: yolov8-ros2-cpu
+    hostname: ros2-vision-detector-cpu
+    
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - PYTHONUNBUFFERED=1
+      - ROS_DOMAIN_ID=42
+    
+    volumes:
+      # 项目代码
+      - ./:/workspace
+      # ROS2工作空间
+      - ../ros2_ws:/home/developer/ros2_ws
+      # 权重文件
+      - ./weights:/workspace/weights
+      # X11 socket
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # 运行结果
+      - ./runs:/workspace/runs
+      # 数据集
+      - ./data:/workspace/data
+    
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    
+    network_mode: host
+    
+    privileged: true
+    
+    stdin_open: true
+    tty: true
+    
+    restart: unless-stopped
+    
+    working_dir: /workspace
+    
+    command: /bin/bash
+
+  # ROS2 GPU版本
+  yolov8-ros2-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.ros2.gpu
+    image: yolov8-d435i:ros2-gpu-latest
+    container_name: yolov8-ros2-gpu
+    hostname: ros2-vision-detector-gpu
+    
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - PYTHONUNBUFFERED=1
+      - ROS_DOMAIN_ID=42
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    
+    volumes:
+      # 项目代码
+      - ./:/workspace
+      # ROS2工作空间
+      - ../ros2_ws:/home/developer/ros2_ws
+      # 权重文件
+      - ./weights:/workspace/weights
+      # X11 socket
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # 运行结果
+      - ./runs:/workspace/runs
+      # 数据集
+      - ./data:/workspace/data
+    
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    
+    network_mode: host
+    
+    privileged: true
+    
+    runtime: nvidia
+    
+    stdin_open: true
+    tty: true
+    
+    restart: unless-stopped
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    working_dir: /workspace
+    
+    command: /bin/bash
+
+  # ROS2 Jetson版本
+  yolov8-ros2-jetson:
+    build:
+      context: .
+      dockerfile: Dockerfile.ros2.jetson
+    image: yolov8-d435i:ros2-jetson-latest
+    container_name: yolov8-ros2-jetson
+    hostname: ros2-vision-detector-jetson
+    
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - PYTHONUNBUFFERED=1
+      - ROS_DOMAIN_ID=42
+      - OPENBLAS_CORETYPE=ARMV8
+    
+    volumes:
+      # 项目代码
+      - ./:/workspace
+      # ROS2工作空间
+      - ../ros2_ws:/home/developer/ros2_ws
+      # 权重文件
+      - ./weights:/workspace/weights
+      # X11 socket
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # 运行结果
+      - ./runs:/workspace/runs
+      # 数据集
+      - ./data:/workspace/data
+      # Jetson CUDA库
+      - /usr/local/cuda:/usr/local/cuda:ro
+    
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+      # Jetson GPU设备
+      - /dev/nvhost-ctrl
+      - /dev/nvhost-ctrl-gpu
+      - /dev/nvhost-prof-gpu
+      - /dev/nvmap
+      - /dev/nvhost-gpu
+      - /dev/nvhost-as-gpu
+    
+    network_mode: host
+    
+    privileged: true
+    
+    runtime: nvidia
+    
+    stdin_open: true
+    tty: true
+    
+    restart: unless-stopped
+    
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 2G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    shm_size: '2gb'
+    
+    working_dir: /workspace
+    
+    command: /bin/bash

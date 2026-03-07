@@ -1,0 +1,29 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+
+Visualization Manager:
+  Displays:
+    - Class: rviz_default_plugins/Image
+      Name: RGB Image
+      Topic:
+        Value: /camera/camera/color/image_raw
+      
+    - Class: rviz_default_plugins/Image
+      Name: Detection Result
+      Topic:
+        Value: /detection_image
+      
+    - Class: rviz_default_plugins/Image
+      Name: Depth Image
+      Topic:
+        Value: /camera/camera/aligned_depth_to_color/image_raw
+
+  Global Options:
+    Fixed Frame: camera_link
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
