@@ -1,0 +1,156 @@
+version: '3.8'
+
+services:
+  # ROS2 CPU版本
+  yolov8-ros2-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.ros2
+    image: yolov8-d435i:ros2-cpu-latest
+    container_name: yolov8-ros2-cpu
+    hostname: ros2-vision-detector-cpu
+    
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - PYTHONUNBUFFERED=1
+      - ROS_DOMAIN_ID=42
+    
+    volumes:
+      - ../:/ros2_vision_project
+    
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    
+    network_mode: host
+    
+    privileged: true
+    
+    stdin_open: true
+    tty: true
+    
+    restart: unless-stopped
+    
+    working_dir: /workspace
+    
+    command: /bin/bash
+
+  # ROS2 GPU版本
+  yolov8-ros2-gpu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ros2.gpu
+      # 【核心新增】接收外部环境变量 GPU_SERIES，如果没有传，默认用 40
+      args:
+        GPU_SERIES: ${GPU_SERIES:-40}
+    image: yolov8-d435i:ros2-gpu-latest
+    container_name: yolov8-ros2-gpu
+    hostname: ros2-vision-detector-gpu
+    shm_size: '8gb'
+    
+    environment:
+      - DISPLAY=${DISPLAY}
+     # - WAYLAND_DISPLAY=${WAYLAND_DISPLAY} # 增加这一行
+     # - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} # 增加这一行
+      - QT_X11_NO_MITSHM=1
+      - PYTHONUNBUFFERED=1
+      - ROS_DOMAIN_ID=42
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    
+    volumes:
+      - ../:/ros2_vision_project
+      - /tmp/.X11-unix:/tmp/.X11-unix  # <--- 必须加上这一行！否则窗口弹不出来
+      - /dev:/dev                      # <--- 必须加上这一行！否则相机找不到
+    
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    
+    network_mode: host
+    
+    privileged: true
+    
+    runtime: nvidia
+    
+    stdin_open: true
+    tty: true
+    
+    restart: unless-stopped
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    working_dir: /ros2_vision_project
+    
+    command: /bin/bash
+
+
+
+  # ROS2 Jetson Orin Nano版本
+  yolov8-ros2-jetson:
+    build:
+      context: ..                                   # 【调整】与GPU版对齐，使用上一级目录作为上下文
+      dockerfile: docker/Dockerfile.ros2.jetson     # 【调整】统一存放路径格式
+    image: yolov8-d435i:ros2-jetson-latest
+    container_name: yolov8-ros2-jetson
+    hostname: ros2-vision-detector-jetson
+    shm_size: '4gb'                                 # 【调整】Jetson内存较小，设为4G或6G(防止YOLO DataLoader报错，又不会占满8G系统内存)
+    
+    environment:
+      - DISPLAY=${DISPLAY}
+     # - WAYLAND_DISPLAY=${WAYLAND_DISPLAY}         # 【同步】Jetpack 6默认是Ubuntu 22.04+Wayland，建议加上备用
+     # - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} 
+      - QT_X11_NO_MITSHM=1
+      - PYTHONUNBUFFERED=1
+      - ROS_DOMAIN_ID=42
+      - OPENBLAS_CORETYPE=ARMV8                     # 【保留】Jetson ARM架构专属
+      - NVIDIA_VISIBLE_DEVICES=all                  # 【同步】从GPU版同步，Jetpack 5+版本推荐加上
+      - NVIDIA_DRIVER_CAPABILITIES=all              # 【同步】从GPU版同步
+    
+    volumes:
+      - ../:/ros2_vision_project                    # 【调整】清理多余挂载，与GPU版本完全对齐
+      - /tmp/.X11-unix:/tmp/.X11-unix               # 必须加上这一行 否则窗口弹不出来
+      - /dev:/dev                                   # 必须加上这一行 否则相机找不到
+      # - /usr/local/cuda:/usr/local/cuda:ro        # 注释掉：若基础镜像使用了l4t系列，CUDA已在容器内，无需宿主机强行覆盖挂载
+    
+    devices:
+      - /dev/bus/usb:/dev/bus/usb                   # USB设备(RealSense必须)
+      # Jetson 专属底层硬件及GPU加速节点映射
+      - /dev/nvhost-ctrl
+      - /dev/nvhost-ctrl-gpu
+      - /dev/nvhost-prof-gpu
+      - /dev/nvmap
+      - /dev/nvhost-gpu
+      - /dev/nvhost-as-gpu
+    
+    network_mode: host
+    
+    privileged: true
+    
+    runtime: nvidia
+    
+    stdin_open: true
+    tty: true
+    
+    restart: unless-stopped
+    
+    deploy:
+      resources:
+        # limits:                                   # 注释掉硬限制：Jetson是统一内存，过度限制可能导致YOLO直接OOM被杀
+        #   memory: 6G
+        reservations:
+          # memory: 2G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    working_dir: /ros2_vision_project               # 【同步】与GPU版对齐
+    
+    command: /bin/bash
+
