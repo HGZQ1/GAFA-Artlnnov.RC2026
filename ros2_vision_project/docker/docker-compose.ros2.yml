@@ -95,11 +95,11 @@ services:
   yolov8-ros2-jetson:
     build:
       context: ..                                   # 【调整】与GPU版对齐，使用上一级目录作为上下文
-      dockerfile: docker/Dockerfile.ros2.jetson     # 【调整】统一存放路径格式
+      dockerfile: docker/Dockerfile.ros2-1.jetson     # 【调整】统一存放路径格式
     image: yolov8-d435i:ros2-jetson-latest
     container_name: yolov8-ros2-jetson
     hostname: ros2-vision-detector-jetson
-    shm_size: '4gb'                                 # 【调整】Jetson内存较小，设为4G或6G(防止YOLO DataLoader报错，又不会占满8G系统内存)
+    shm_size: '6gb'                                 # 【调整】Jetson内存较小，设为4G或6G(防止YOLO DataLoader报错，又不会占满8G系统内存)
     
     environment:
       - DISPLAY=${DISPLAY}

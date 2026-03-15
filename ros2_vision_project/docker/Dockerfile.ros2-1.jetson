@@ -1,0 +1,204 @@
+# YOLOv8-D435i + ROS2 Humble Docker配置 - Jetson Orin Nano专用
+# 包含完整的ROS2开发环境 + L4T优化
+
+# 注意：此镜像基于L4T，需要在Jetson设备上构建
+FROM dustynv/l4t-pytorch:r36.2.0
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    TZ=Asia/Shanghai \
+    ROS_DISTRO=humble \
+    OPENBLAS_CORETYPE=ARMV8 \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:/opt/ros/humble/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:/opt/ros/humble/lib:$LD_LIBRARY_PATH
+
+# 设置工作目录
+WORKDIR /ros2_vision_project
+
+# 1. 安装基础工具
+RUN apt-get update && apt-get install -y curl gnupg2 lsb-release
+
+# 2. 添加 ROS 2 GPG 密钥
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+# 3. 添加 ROS 2 软件源
+RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+# 更新apt源并安装系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # ROS2开发工具
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-vcstool \
+    ros-humble-vision-msgs \
+    # 基础工具
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl 
+    
+    # OpenCV依赖
+RUN apt-get install -y --no-install-recommends \
+    libopencv-dev \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    # GUI支持
+    libglib2.0-0 \
+    libgl1-mesa-glx \
+    libglu1-mesa \
+    libx11-6 \
+    libxext6 \
+    libxrender1 \
+    libxtst6 \
+    libxi6 
+   
+    # RealSense依赖
+RUN apt-get install -y --no-install-recommends \
+    libusb-1.0-0 \
+    libusb-1.0-0-dev \
+    usbutils \
+    libudev-dev \
+    libssl-dev \
+    libglfw3-dev \
+    libgtk-3-dev \
+    # 其他工具
+    vim \
+    nano \
+    htop \
+    net-tools \
+    iputils-ping \
+    && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------------------------------------------
+# 4. ROS2 source
+# ------------------------------------------------------------------------------
+
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+    -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+RUN echo "deb [arch=$(dpkg --print-architecture) \
+signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+http://packages.ros.org/ros2/ubuntu \
+$(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+> /etc/apt/sources.list.d/ros2.list
+
+# 安装ROS2 Humble
+RUN apt-get update && apt-get install -y \
+    ros-humble-desktop \
+    ros-humble-ros-base \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-vcstool \
+    && rm -rf /var/lib/apt/lists/*
+    
+   # 安装ROS2视觉相关包
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-humble-image-transport-plugins \
+        ros-humble-realsense2-camera \
+        ros-humble-realsense2-description \
+        ros-humble-rqt \
+    && rm -rf /var/lib/apt/lists/*
+
+
+    
+# 更新apt源并安装系统依赖
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        git \
+        wget \
+        curl \
+        vim \
+        nano \
+        htop \
+        usbutils \
+        iputils-ping \
+        
+    && rm -rf /var/lib/apt/lists/*
+
+
+
+    
+    
+
+# 升级pip
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+RUN rm -rf /usr/lib/python3/dist-packages/sympy* && \
+    rm -rf /usr/lib/python3/dist-packages/numpy* && \
+    rm -rf /usr/lib/python3/dist-packages/opencv*
+
+
+# 2. 再锁 numpy（关键）
+RUN pip3 install --no-cache-dir \
+    numpy==1.26.4 \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    --break-system-packages
+    
+
+# 3. 【一键安装所有业务依赖】
+COPY docker/requirements.txt /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --break-system-packages
+
+
+# -------------------------------------------------
+# 再次终锁 numpy（必备）
+# -------------------------------------------------
+
+RUN pip3 install --force-reinstall \
+    numpy==1.26.4 \
+    --no-deps \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    --break-system-packages
+
+# 4. 再次设置环境变量，确保 NVRTC 不会找不到库
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.10/dist-packages/nvidia/cuda_nvrtc/lib:$LD_LIBRARY_PATH
+
+# 验证PyTorch和CUDA
+RUN python3 -c "import torch; print('PyTorch version:', torch.__version__); \
+    print('CUDA available:', torch.cuda.is_available()); \
+    print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A')"
+
+# 更新rosdep（如果需要）
+RUN rosdep update || echo "rosdep already initialized"
+
+# 创建ROS2工作空间
+#RUN mkdir -p /root/ros2_ws/src
+
+# 创建非root用户
+RUN useradd -m -u 1000 -s /bin/bash developer && \
+    echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    mkdir -p /home/developer/ros2_ws/src && \
+    chown -R developer:developer /home/developer/ros2_ws
+
+# 设置USB设备权限规则
+RUN echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", MODE="0666"' > /etc/udev/rules.d/99-realsense-libusb.rules && \
+    echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", MODE="0666", GROUP="plugdev"' >> /etc/udev/rules.d/99-realsense-libusb.rules
+
+# 添加用户到必要的组
+RUN usermod -aG video developer && \
+    usermod -aG plugdev developer
+
+# 切换到非root用户
+USER developer
+WORKDIR /home/developer
+
+# 设置ROS2环境（添加到bashrc）
+RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc && \
+    echo "if [ -f ~/ros2_ws/install/setup.bash ]; then source ~/ros2_ws/install/setup.bash; fi" >> ~/.bashrc && \
+    echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc && \
+    echo "export PYTHONPATH=/workspace:\$PYTHONPATH" >> ~/.bashrc
+
+# 默认启动bash
+CMD ["/bin/bash"]
+
+# Jetson优化提示
+# 构建后可以使用以下命令优化性能：
+# sudo nvpmodel -m 0  (最大性能模式)
+# sudo jetson_clocks   (锁定最大频率)
