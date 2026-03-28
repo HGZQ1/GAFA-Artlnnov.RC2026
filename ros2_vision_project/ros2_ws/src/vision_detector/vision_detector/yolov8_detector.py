@@ -12,8 +12,38 @@ from typing import List, Tuple, Optional
 class YOLOv8Detector:
     """YOLOv8检测器封装"""
     
+    # def model_path_turn(self) -> str:
+    #     """切换模型权重
+        
+    #     Returns:
+    #         str: 新的模型路径
+    #     """
+    #     print("模型权重，当前权重路径:", self.model_path)
+        
+    #     # 模型名称到路径的映射
+    #     model_mapping = {
+    #         "kfs": "kfs.pt",
+    #         "wuqi": "wuqi.pt",
+    #         "yolov8n": "yolov8n.pt"
+    #     }
+        
+    #     # 显示可用模型
+    #     print("可用模型:", ", ".join(model_mapping.keys()))
+        
+    #     # 获取用户输入
+    #     model = input("请输入新的模型名称: ").strip()
+        
+    #     # 检查输入是否有效
+    #     if model in model_mapping:
+    #         new_model_path = model_mapping[model]
+    #         print(f"已切换到 {new_model_path}")
+    #         return new_model_path
+    #     else:
+    #         print(f"错误: 未知的模型名称 '{model}'，使用默认模型 yolov8n.pt")
+    #         return "yolov8n.pt"
+
     def __init__(self, 
-                 model_path: str = 'yolov8n.pt',
+                 model_path: str = 'yolov8n.pt',#Optional[str] = None,
                  conf_threshold: float = 0.5,
                  iou_threshold: float = 0.45,
                  device: str = 'cuda'):
@@ -26,6 +56,13 @@ class YOLOv8Detector:
             iou_threshold: NMS的IoU阈值
             device: 推理设备 ('cuda' or 'cpu')
         """
+
+        # if model_path is None:
+        #     model_path = "yolov8n.pt" # 默认模型权重路径
+        # else:
+        #     self.model_path = model_path
+
+        #self.model_path = model_path
         self.model = YOLO(model_path)
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
@@ -34,8 +71,12 @@ class YOLOv8Detector:
         # 预热模型
         dummy_img = np.zeros((640, 640, 3), dtype=np.uint8)
         _ = self.model(dummy_img, verbose=False, device=self.device)
+
+    
         
     def detect(self, image: np.ndarray) -> List[dict]:
+        if self.model is None:
+            return []
         """
         执行目标检测
         

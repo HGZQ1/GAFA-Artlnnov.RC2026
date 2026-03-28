@@ -1,0 +1,60 @@
+# 0. ROS2 参数配置
+serial_controller:
+  ros__parameters:
+    port: "/dev/stm32"
+    baudrate: 115200
+    timeout: 0.1
+
+# 1. 全局配置
+config:
+  baudrate: 115200
+  buffer_size: 256
+  head_byte_1: 0x5A      # 双帧头 1
+  head_byte_2: 0xA5      # 双帧头 2
+  checksum: "CRC8"              # 校验算法, 可选: NONE, SUM8, XOR8, CRC8
+  require_handshake: true       # false = 跳过握手, 上电直接进入 RUNNING, 握手内容为配置文件hash
+  enable_heartbeat: true        # false = 不发送 Heartbeat, 也不做 ACK 断连检测
+  qos_depth: 10                 
+  heartbeat_timeout_ms: 3000    # 心跳确认超时毫秒数 (0 = 不检测)
+
+# 2. 类型映射
+type_mappings:
+  f32: "float"
+  i32: "int32_t"
+  u8:  "uint8_t"
+  u16: "uint16_t"
+  u32: "uint32_t"
+
+messages:
+
+  # 3.0 系统消息
+  - name: "Heartbeat"
+    id: 0x00
+    direction: "tx"
+    sub_topic: "/task/heartbeat"
+    ros_msg: "std_msgs/msg/UInt32"
+    notes: "握手完成后，ROS 侧以固定周期下发心跳。电控收到后必须尽快原样回同一个 count 作为确认，但不再独立主动发送心跳。只有与 ROS 最近一次发送值一致的回包才算有效确认。"
+    fields:
+      - { proto: "count", type: "u32", ros: "data" }
+
+  - name: "Handshake"
+    id: 0xFF
+    direction: "both"
+    sub_topic: "/task/handshake"
+    pub_topic: "/task/handshake"
+    ros_msg: "std_msgs/msg/UInt32"
+    notes: "上电后 ROS 主动发起握手，电控收到后用相同的 protocol_hash 原样回复。握手通过后方可发送其他数据帧，且整个连接周期内只需执行一次。protocol_hash 值见【全局参数】。"
+    fields:
+      - { proto: "protocol_hash", type: "u32", ros: "data" }
+
+
+  # 底盘移动控制
+  - name: "CmdVel"
+    id: 0x01
+    direction: "tx"
+    sub_topic: "/cmd_vel"
+    ros_msg: "geometry_msgs/msg/Twist"
+    fields:
+      - { proto: "linear_x",  type: "f32", ros: "linear.x" }
+      - { proto: "linear_y",  type: "f32", ros: "linear.y" }
+      - { proto: "angular_z", type: "f32", ros: "angular.z" }
