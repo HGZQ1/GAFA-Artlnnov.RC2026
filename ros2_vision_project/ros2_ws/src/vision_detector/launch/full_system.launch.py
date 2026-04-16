@@ -17,6 +17,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory
 import os
+import decision_processor.config as config
 
 
 # 模型文件夹路径（所有模型统一放这里）
@@ -36,11 +37,12 @@ def generate_launch_description():
     # ── 模型参数：支持文件名或绝对路径 ──
     model_arg = DeclareLaunchArgument(
         'model',
-        default_value='best.pt',        # 只写文件名，自动在 weights/ 下查找
+        default_value='best.pt',        # 只写文件名，自动在 weights/ 下查找  默认模型：best.pt,修改这行代码即可更换默认模型
         description=(
             '模型文件名（放在 weights/ 目录下）或绝对路径\n'
             '  文件名示例: best.pt / armor.pt / punch.pt\n'
             '  绝对路径示例: /home/hgzq/custom.pt'
+            '  喵喵喵  > <'
         )
     )
     model_name = LaunchConfiguration('model')
@@ -66,13 +68,18 @@ def generate_launch_description():
             )
         ]),
         launch_arguments={
-            'enable_color':               'true',
-            'enable_depth':               'true',
-            'enable_infra1':              'false',
-            'enable_infra2':              'false',
-            'align_depth.enable':         'true',
-            'rgb_camera.color_profile':   '1280x720x30',
-            'depth_module.depth_profile': '848x480x30',
+            'enable_color':              'true',
+            'enable_depth':              'true',
+            'enable_infra1':             'false',
+            'enable_infra2':             'false',
+            'align_depth.enable':        'true',
+            'rgb_camera.color_profile':  '1280x720x30',
+            'depth_module.depth_profile':'848x480x30',
+            'enable_gyro':               'true',
+            'enable_accel':              'true',
+            'gyro_fps':                  '200',
+            'accel_fps':                 '100',
+            'unite_imu_method':          '2',
         }.items()
     )
 
@@ -123,22 +130,65 @@ def generate_launch_description():
                 name='decision_processor_node',
                 output='screen',
                 parameters=[{
-                    'wheel_diameter_m':    0.096,
-                    'track_width_m':       0.28,
-                    'stop_distance_m':     0.20,
-                    'align_threshold_deg': 5.0,
-                    'pick_duration_s':     3.0,
+                    'wheel_diameter_m':    config.WHEEL_DIAMETER_M,
+                    'track_width_m':       config.TRACK_WIDTH_M,
+                    'stop_distance_m':     config.STOP_DISTANCE_M,  #这里写死了
+                    'align_threshold_deg': config.ALIGN_THRESHOLD_DEG,
+                    'pick_duration_s':     config.PICK_DURATION_S,  #这里写死了
                     'conf_threshold':      conf,
                 }]
             )
         ]
     )
 
+
+        # ── 节点：IMU 处理（延迟4秒，等相机就绪）──
+    imu_node = TimerAction(
+        period=4.0,
+        actions=[
+            Node(
+                package='decision_processor',
+                executable='imu_processor',
+                name='imu_processor',
+                output='screen',
+            )
+        ]
+    )
+
+    # ── 节点：里程计融合（延迟4.5秒）──
+    odom_node = TimerAction(
+        period=4.5,
+        actions=[
+            Node(
+                package='decision_processor',
+                executable='odometry_fusion',
+                name='odometry_fusion',
+                output='screen',
+            )
+        ]
+    )
+
+    # ── 节点：梅林导航（延迟5秒，等里程计就绪）──
+    meilin_node = TimerAction(
+        period=5.0,
+        actions=[
+            Node(
+                package='decision_processor',
+                executable='meilin_navigator',
+                name='meilin_navigator',
+                output='screen',
+            )
+        ]
+    )
+
     return LaunchDescription([
-        model_arg,
-        conf_arg,
-        device_arg,
-        realsense_launch,
-        detector_node,
-        decision_node,
-    ])
+    model_arg,
+    conf_arg,
+    device_arg,
+    realsense_launch,
+    detector_node,
+    imu_node,       # 新增
+    odom_node,      # 新增
+    meilin_node,    # 新增
+    decision_node,
+])

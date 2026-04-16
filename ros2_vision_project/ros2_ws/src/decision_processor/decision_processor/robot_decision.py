@@ -1,38 +1,21 @@
 """
 robot_decision.py
-整合所有算法的主决策类，每帧调用 step() 返回底盘指令
+五状态决策状态机（以距离为核心判据）
 """
 import time
+import math
 from enum import Enum, auto
 
-import numpy as np
-
-
-from .target_confirmation import TargetConfirmation, select_best_target
-from .kalman_filter        import KalmanFilter2D, camera_to_robot, is_valid_detection
-from .motion_planner       import MotionPlanner, TrapezoidPlanner
-
-# 需要从 vision_detector 的 utils.py 导入坐标转换函数
-# 如果打包方式不同，可以直接复制函数到本文件
-def pixel_to_3d_point(u, v, depth, camera_matrix):
-    """像素坐标 + 深度 → 相机坐标系3D坐标"""
-    fx = camera_matrix[0, 0]
-    fy = camera_matrix[1, 1]
-    cx = camera_matrix[0, 2]
-    cy = camera_matrix[1, 2]
-    return (u - cx) * depth / fx, (v - cy) * depth / fy, depth
-# try:
-    
-# except ImportError:
-#     def pixel_to_3d_point(u, v, depth, camera_matrix):
-#         fx = camera_matrix[0, 0]
-#         fy = camera_matrix[1, 1]
-#         cx = camera_matrix[0, 2]
-#         cy = camera_matrix[1, 2]
-#         z = depth
-#         x = (u - cx) * z / fx
-#         y = (v - cy) * z / fy
-#         return x, y, z
+from .target_confirmation import TargetConfirmation
+from .kalman_filter       import KalmanFilter2D
+from .motion_planner      import MotionPlanner, TrapezoidPlanner
+from .config import (
+    STOP_DISTANCE_M,
+    ARRIVAL_SETTLE_S,
+    PICK_DURATION_S,
+    ALIGN_THRESHOLD_DEG,
+    WUGUAN_TOTAL_WEAPONS,
+)
 
 
 class RobotState(Enum):
@@ -44,161 +27,173 @@ class RobotState(Enum):
 
 
 class RobotDecision:
-    """
-    整合感知、处理、规划三层的主决策类
-    每帧调用 step()，返回发给 auto_serial_bridge 的指令字典
-    """
 
     def __init__(self,
                  wheel_diameter_m:    float = 0.096,
                  track_width_m:       float = 0.28,
-                 stop_distance_m:     float = 0.20,
-                 align_threshold_deg: float = 5.0,
-                 pick_duration_s:     float = 3.0,
+                 stop_distance_m:     float = STOP_DISTANCE_M,
+                 align_threshold_deg: float = ALIGN_THRESHOLD_DEG,
+                 pick_duration_s:     float = PICK_DURATION_S,
                  conf_threshold:      float = 0.5):
-        """
-        Args:
-            wheel_diameter_m:    车轮直径（米），按实际填写
-            track_width_m:       轮距（米），按实际填写
-            stop_distance_m:     距目标多远时停止前进
-            align_threshold_deg: 对准角度容限（度）
-            pick_duration_s:     拾取动作持续时间（秒）
-            conf_threshold:      YOLO 置信度阈值
-        """
+
         self.state = RobotState.SEARCHING
 
-        # 初始化各层模块
-        self.confirmation = TargetConfirmation(
-            confirm_frames=3, lost_frames=5)
+        self.confirmation = TargetConfirmation(confirm_frames=3, lost_frames=5)
         self.kalman       = KalmanFilter2D(dt=0.05)
         self.planner      = MotionPlanner(
             wheel_diameter_m    = wheel_diameter_m,
             track_width_m       = track_width_m,
             stop_distance_m     = stop_distance_m,
-            align_threshold_deg = align_threshold_deg)
-        self.trap         = TrapezoidPlanner()
+            align_threshold_deg = align_threshold_deg,
+        )
+        self.trap = TrapezoidPlanner()
 
         self.conf_thr      = conf_threshold
+        self.stop_dist     = stop_distance_m
+        self.align_thr_deg = align_threshold_deg
         self.pick_duration = pick_duration_s
+        self.settle_time   = ARRIVAL_SETTLE_S
 
-        self._last_pos     = None      # 上一帧目标位置，用于跳变检测
-        self._pick_start   = 0.0       # 拾取开始时间戳
+        self._last_pos       = None
+        self._arrival_start  = 0.0
+        self._pick_start     = 0.0
 
-    def step(self, detections: list,
-             distances: list,
-             camera_matrix: np.ndarray) -> dict:
+        self.pick_count      = 0
+        self.all_picked      = False
+        self._all_done_fired = False
+
+        self.align_angle_deg = 0.0
+        self.target_distance = 0.0
+        self.arm_target_dist = 0.0
+        self.pick_elapsed    = 0.0
+        self.settle_remain   = 0.0
+
+        self.event = ''
+
+    def update(self, detected: bool,
+               base_x: float, base_y: float,
+               distance: float,
+               align_angle: float,
+               arm_distance: float = 0.0) -> dict:
         """
-        每帧调用一次，输入当前检测结果，输出底盘指令
-
         Args:
-            detections:    YOLOv8 检测结果列表（detector_node 输出）
-            distances:     各目标距离列表（米）
-            camera_matrix: 相机内参矩阵 (3x3 numpy array)
-        Returns:
-            cmd: 指令字典，直接映射到 protocol.yaml 的字段
-                 {turn_angle, turn_wheels, forward_dist,
-                  drive_wheels, pickup_action, search_rotate}
+            detected:    本帧是否检测到目标
+            base_x/y:    底盘坐标系下的目标位置（用于运动规划）
+            distance:    相机到目标直线距离（用于到达判定）
+            align_angle: 目标相对相机中轴线的水平偏角（度）
+                         正=物体在左侧，负=物体在右侧，0=正中
+                         由 processor_node 直接从相机水平偏移计算
+            arm_distance: 目标到机械臂底座的距离
         """
-        # ── 感知层：选最优目标，连续帧确认 ──
-        best      = select_best_target(detections, distances,
-                                       self.conf_thr)
-        confirmed = self.confirmation.update(best is not None)
-
-        # ── 数据处理层：滤波 + 坐标转换 ──
-        if confirmed and best is not None:
-            det, dist = best
-            x1, y1, x2, y2 = det['bbox']
-            u = int((x1 + x2) / 2)
-            v = int((y1 + y2) / 2)
-
-            # 像素坐标 → 相机3D坐标
-            cam_x, cam_y, _ = pixel_to_3d_point(
-                u, v, dist, camera_matrix)
-
-            # 相机坐标 → 机器人坐标
-            robot_x, robot_y = camera_to_robot(cam_x, cam_y, dist)
-
-            # 跳变检测
-            new_pos = (robot_x, robot_y)
-            if not is_valid_detection(new_pos, self._last_pos):
-                return self._stop_cmd()   # 误检，本帧跳过
-
-            self._last_pos = new_pos
-
-            # 卡尔曼滤波平滑
-            rx, ry = self.kalman.update(robot_x, robot_y)
-        else:
-            rx, ry = 0.0, 0.0
-            if not confirmed:
-                self._last_pos = None
-                self.kalman.reset()
-
-        # ── 规划层：计算运动指令 ──
-        plan = self.planner.plan(rx, ry) if confirmed else None
-
-        # ── 决策层：状态机 ──
-        return self._state_machine(confirmed, plan)
-
-    def _state_machine(self, confirmed: bool,
-                       plan) -> dict:
         now = time.time()
         cmd = self._stop_cmd()
+        self.event = ''
 
+        confirmed = self.confirmation.update(detected)
+
+        # 只在本帧实际看到目标时更新显示值
+        if detected and distance > 0:
+            self.align_angle_deg = align_angle
+            self.target_distance = distance
+
+        # ── SEARCHING ──
         if self.state == RobotState.SEARCHING:
+            if self.all_picked:
+                if not self._all_done_fired:
+                    self._all_done_fired = True
+                    self.event = 'ALL_DONE'
+                return cmd
             if confirmed:
                 self.state = RobotState.ALIGNING
+                self.event = 'TARGET_LOCKED'
             else:
-                cmd['search_rotate'] = 1.0   # 告知STM32原地旋转搜索
+                cmd['search_rotate'] = 1.0
 
+        # ── ALIGNING ──
         elif self.state == RobotState.ALIGNING:
             if not confirmed:
+                self._reset_tracking()
                 self.state = RobotState.SEARCHING
-                self.kalman.reset()
-            elif plan.phase == 'ALIGNING':
-                cmd['turn_angle']   = plan.turn_deg
-                cmd['turn_wheels']  = plan.turn_wheels
-            elif plan.phase in ('MOVING', 'ARRIVED'):
-                self.state = RobotState.MOVING
+                self.event = 'TARGET_LOST'
+            elif not detected:
+                # 确认器没超时但本帧没看到，等待
+                pass
+            else:
+                # 本帧看到了，用实时角度判断
+                if abs(align_angle) > self.align_thr_deg:
+                    plan = self.planner.plan(base_x, base_y)
+                    cmd['turn_angle']  = plan.turn_deg
+                    cmd['turn_wheels'] = plan.turn_wheels
+                else:
+                    self.state = RobotState.MOVING
+                    self.event = 'ALIGNED'
 
+        # ── MOVING ──
         elif self.state == RobotState.MOVING:
             if not confirmed:
+                self._reset_tracking()
                 self.state = RobotState.SEARCHING
-                self.kalman.reset()
-            elif plan.phase == 'ARRIVED':
-                self.state = RobotState.ARRIVED
-            elif plan.phase == 'ALIGNING':
-                # 前进途中偏转，退回对准
-                self.state = RobotState.ALIGNING
+                self.event = 'TARGET_LOST'
+            elif not detected:
+                pass
             else:
-                cmd['forward_dist']  = plan.forward_m
-                cmd['drive_wheels']  = plan.drive_wheels
+                # if abs(align_angle) > self.align_thr_deg * 2:
+                #     self.state = RobotState.ALIGNING
+                #     self.event = 'REALIGN'
+                if distance <= self.stop_dist:
+                    self._arrival_start = now
+                    self.state = RobotState.ARRIVED
+                    self.event = 'ARRIVED'
+                else:
+                    plan = self.planner.plan(base_x, base_y)
+                    cmd['forward_dist']  = plan.forward_m
+                    cmd['drive_wheels']  = plan.drive_wheels
 
+        # ── ARRIVED ──
         elif self.state == RobotState.ARRIVED:
-            # 到达后立即触发拾取
-            self._pick_start = now
-            self.state = RobotState.PICKING
+            elapsed = now - self._arrival_start
+            self.settle_remain = max(0, self.settle_time - elapsed)
+            if elapsed >= self.settle_time:
+                self._pick_start = now
+                self.arm_target_dist = arm_distance
+                self.state = RobotState.PICKING
+                self.event = 'PICK_START'
 
+        # ── PICKING ──
         elif self.state == RobotState.PICKING:
             cmd['pickup_action'] = 1.0
-            if (now - self._pick_start) >= self.pick_duration:
-                # 拾取完成，重置寻找下一个目标
+            cmd['arm_distance']  = self.arm_target_dist
+            self.pick_elapsed = now - self._pick_start
+
+            if self.pick_elapsed >= self.pick_duration:
+                self.pick_count += 1
+                self.event = 'PICK_DONE'
+                if self.pick_count >= WUGUAN_TOTAL_WEAPONS:
+                    self.all_picked = True
+                self._reset_tracking()
                 self.state = RobotState.SEARCHING
-                self.kalman.reset()
-                self.confirmation.reset()
-                self._last_pos = None
 
         return cmd
 
     def _stop_cmd(self) -> dict:
-        """返回全停指令"""
         return {
-            'turn_angle':    0.0,
-            'turn_wheels':   0.0,
-            'forward_dist':  0.0,
-            'drive_wheels':  0.0,
-            'pickup_action': 0.0,
-            'search_rotate': 0.0,
+            'turn_angle': 0.0, 'turn_wheels': 0.0,
+            'forward_dist': 0.0, 'drive_wheels': 0.0,
+            'pickup_action': 0.0, 'search_rotate': 0.0,
+            'arm_distance': 0.0,
         }
+
+    def _reset_tracking(self):
+        self.kalman.reset()
+        self.confirmation.reset()
+        self._last_pos = None
+
+    def reset_all(self):
+        self._reset_tracking()
+        self.state = RobotState.SEARCHING
+        self.pick_count = 0
+        self.all_picked = False
+        self._all_done_fired = False
 
     @property
     def state_name(self) -> str:

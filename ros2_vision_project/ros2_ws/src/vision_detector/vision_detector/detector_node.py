@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
 YOLOv8-D435i ROS2检测节点（支持模型热切换）
+
+修复内容：
+  1. 新增 /vision/current_model 发布器，模型切换后通知决策节点联动切换场景
+  2. 启动时也发布初始模型名，确保决策节点能获取初始场景
 """
 
 import gc
@@ -12,7 +16,7 @@ from sensor_msgs.msg import Image, CameraInfo
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 from vision_msgs.msg import BoundingBox2D, Pose2D
 from geometry_msgs.msg import Point, PointStamped
-from std_msgs.msg import Header
+from std_msgs.msg import Header, String          # ← 新增 String
 from rcl_interfaces.msg import SetParametersResult
 from cv_bridge import CvBridge
 import numpy as np
@@ -82,6 +86,9 @@ class VisionDetectorNode(Node):
         # 模型切换锁（切换期间暂停检测）
         self._model_lock = False
 
+        # 记录当前模型文件名（用于发布通知）
+        self._current_model_name = os.path.basename(model_path)
+
         # 订阅器
         camera_topic      = self.get_parameter('camera_topic').value
         depth_topic       = self.get_parameter('depth_topic').value
@@ -100,6 +107,11 @@ class VisionDetectorNode(Node):
         self.raw_target_pub = self.create_publisher(
             PointStamped, '/vision/raw_target', 10)
 
+        # ═══ 修复：新增模型名称发布器 ═══
+        # 当模型切换时发布新模型名，决策节点据此自动切换场景策略
+        self.model_pub = self.create_publisher(
+            String, '/vision/current_model', 10)
+
         if self.publish_vis:
             self.vis_pub = self.create_publisher(
                 Image, '/detection_image', 10)
@@ -112,9 +124,14 @@ class VisionDetectorNode(Node):
         # 注册参数变更回调（model_switcher 通过此接口热切换）
         self.add_on_set_parameters_callback(self._on_param_change)
 
+        # ═══ 修复：启动时发布初始模型名 ═══
+        # 使用定时器延迟发布，确保决策节点有时间启动并订阅
+        self.create_timer(2.0, self._publish_initial_model)
+        self._initial_model_published = False
+
         self.get_logger().info(
             'Vision Detector Node 启动成功\n'
-            f'  当前模型：{os.path.basename(model_path)}\n'
+            f'  当前模型：{self._current_model_name}\n'
             f'  模型目录：{WEIGHTS_DIR}')
 
     # ──────────────────────────────────────────────────────
@@ -131,6 +148,24 @@ class VisionDetectorNode(Node):
         # 兜底：原样返回，由 YOLO 自行处理
         return model_path
 
+    def _publish_initial_model(self):
+        """延迟发布初始模型名（只执行一次）"""
+        if self._initial_model_published:
+            return
+        self._initial_model_published = True
+        self._notify_model_change(self._current_model_name)
+        self.get_logger().info(
+            f'已发布初始模型名：{self._current_model_name}')
+
+    def _notify_model_change(self, model_name: str):
+        """
+        发布当前模型名到 /vision/current_model
+        决策节点据此自动切换对应的场景策略
+        """
+        msg = String()
+        msg.data = model_name
+        self.model_pub.publish(msg)
+
     # ──────────────────────────────────────────────────────
     #   参数变更回调（model_switcher 触发）
     # ──────────────────────────────────────────────────────
@@ -144,7 +179,7 @@ class VisionDetectorNode(Node):
         return SetParametersResult(successful=True)
 
     def _switch_model(self, new_model_path: str):
-        """热切换模型：释放旧模型显存 → 加载新模型 → 预热"""
+        """热切换模型：释放旧模型显存 → 加载新模型 → 预热 → 通知决策节点"""
         import time
         new_model_path = self._resolve_model_path(new_model_path)
 
@@ -154,9 +189,9 @@ class VisionDetectorNode(Node):
 
         self.get_logger().info(f'开始切换模型：{new_model_path}')
 
-        # 设置锁，等待正在执行的 color_callback 完成（最多等1秒）
+        # 设置锁，等待正在执行的 color_callback 完成
         self._model_lock = True
-        time.sleep(0.1)   # 给当前帧处理留出完成时间
+        time.sleep(0.1)
 
         try:
             # 1. 先把 model 替换为占位对象，防止 None 被调用
@@ -184,13 +219,21 @@ class VisionDetectorNode(Node):
             # 5. 原子替换
             self.detector.model = new_model
 
+            # 6. 更新当前模型名
+            new_name = os.path.basename(new_model_path)
+            self._current_model_name = new_name
+
+            # ═══ 修复：切换成功后通知决策节点 ═══
+            self._notify_model_change(new_name)
+
             self.get_logger().info(
-                f'模型切换成功：{os.path.basename(new_model_path)}')
+                f'模型切换成功：{new_name}，已通知决策节点')
 
         except Exception as e:
             self.get_logger().error(f'模型切换失败：{e}')
         finally:
             self._model_lock = False
+
     # ──────────────────────────────────────────────────────
     #   相机回调
     # ──────────────────────────────────────────────────────
@@ -215,7 +258,7 @@ class VisionDetectorNode(Node):
         try:
             color_image = self.bridge.imgmsg_to_cv2(
                 msg, desired_encoding='bgr8')
-            
+
             if self.detector.model is None:
                 return
 
@@ -317,7 +360,8 @@ class VisionDetectorNode(Node):
             self.get_logger().info(
                 f'Stats - Frames: {self.frame_count}  '
                 f'Detections: {self.detection_count}  '
-                f'Avg: {avg:.2f}/frame')
+                f'Avg: {avg:.2f}/frame  '
+                f'Model: {self._current_model_name}')
 
 
 def main(args=None):
