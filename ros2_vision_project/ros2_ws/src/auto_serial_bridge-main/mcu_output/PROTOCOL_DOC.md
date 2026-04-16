@@ -1,4 +1,4 @@
-> 生成时间：2026-03-25T20:09:47+08:00
+> 生成时间：2026-04-08T22:28:19+08:00
 # MCU ↔ ROS 串口通信协议文档
 
 > **Auto-generated** — 由 `scripts/codegen.py` 根据 `config/protocol.yaml` 生成，请勿手动修改。
@@ -13,8 +13,8 @@
 | 帧头字节 1 | `0x5a` |
 | 帧头字节 2 | `0xa5` |
 | 校验算法 | `CRC8` |
-| 强制握手 | `是` |
-| 协议哈希（握手用）| `0x13415FCC` |
+| 强制握手 | `否` |
+| 协议哈希（握手用）| `0x2669E2D8` |
 
 ---
 
@@ -40,7 +40,6 @@
 - **ROS 话题**：`/task/handshake`
 - **ROS 消息类型**：`std_msgs/msg/UInt32`
 - **数据段字节数（Len）**：`4`
-- **默认生成行为**：`on_receive_Handshake()` 在收到匹配 `PROTOCOL_HASH` 的握手包后会自动调用 `send_Handshake(pkt)` 回包。
 
 | 字节偏移 | 字段名 | C 类型 | 字节数 |
 | :------: | :----- | :----- | :----: |
@@ -69,6 +68,19 @@
 | 0 | `status` | `uint8_t` | 1 |
 | **1** | *(CRC8)* | `uint8_t` | 1 |
 
+### `EncoderFeedback` — ID `0x20`
+
+- **ROS 话题**：`/feedback/encoder`
+- **ROS 消息类型**：`geometry_msgs/msg/Twist`
+- **数据段字节数（Len）**：`12`
+
+| 字节偏移 | 字段名 | C 类型 | 字节数 |
+| :------: | :----- | :----- | :----: |
+| 0 | `delta_x` | `float` | 4 |
+| 4 | `delta_y` | `float` | 4 |
+| 8 | `delta_theta` | `float` | 4 |
+| **12** | *(CRC8)* | `uint8_t` | 1 |
+
 ---
 
 ## ROS → 电控（电控被动接收）
@@ -90,7 +102,6 @@
 - **ROS 话题**：`/task/handshake`
 - **ROS 消息类型**：`std_msgs/msg/UInt32`
 - **数据段字节数（Len）**：`4`
-- **默认生成行为**：`on_receive_Handshake()` 在收到匹配 `PROTOCOL_HASH` 的握手包后会自动调用 `send_Handshake(pkt)` 回包。
 
 | 字节偏移 | 字段名 | C 类型 | 字节数 |
 | :------: | :----- | :----- | :----: |
@@ -140,6 +151,22 @@
 | 12 | `block_height` | `float` | 4 |
 | 16 | `detour` | `float` | 4 |
 | **20** | *(CRC8)* | `uint8_t` | 1 |
+
+### `ClimbCmd` — ID `0x05`
+
+- **ROS 话题**：`/serial/climb_cmd`
+- **ROS 消息类型**：`geometry_msgs/msg/Twist`
+- **数据段字节数（Len）**：`24`
+
+| 字节偏移 | 字段名 | C 类型 | 字节数 |
+| :------: | :----- | :----- | :----: |
+| 0 | `climb_mode` | `float` | 4 |
+| 4 | `slope_deg` | `float` | 4 |
+| 8 | `speed_factor` | `float` | 4 |
+| 12 | `torque_factor` | `float` | 4 |
+| 16 | `nav_mode` | `float` | 4 |
+| 20 | `height_diff` | `float` | 4 |
+| **24** | *(CRC8)* | `uint8_t` | 1 |
 
 ---
 

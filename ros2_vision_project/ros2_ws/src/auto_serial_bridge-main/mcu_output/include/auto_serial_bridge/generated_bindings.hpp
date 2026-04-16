@@ -1,10 +1,10 @@
 #pragma once
 #include <functional>
 #include "auto_serial_bridge/serial_controller.hpp"
-#include <std_msgs/msg/u_int8.hpp>
-#include <geometry_msgs/msg/twist.hpp>
-#include <std_msgs/msg/u_int32.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
+#include <std_msgs/msg/u_int8.hpp>
+#include <std_msgs/msg/u_int32.hpp>
+#include <geometry_msgs/msg/twist.hpp>
 #include "protocol.h"
 
 namespace auto_serial_bridge {
@@ -20,7 +20,6 @@ inline void register_all(SerialController* node) {
             Packet_Heartbeat pkt;
             pkt.count = msg->data;
             node->send_packet(PACKET_ID_HEARTBEAT, pkt);
-            RCLCPP_DEBUG(node->get_logger(), "TX Heartbeat: count=%u", static_cast<unsigned int>(pkt.count));
         }));
 
     // Handshake (ROS -> MCU)
@@ -33,7 +32,6 @@ inline void register_all(SerialController* node) {
             Packet_Handshake pkt;
             pkt.protocol_hash = msg->data;
             node->send_packet(PACKET_ID_HANDSHAKE, pkt);
-            RCLCPP_DEBUG(node->get_logger(), "TX Handshake: protocol_hash=%u", static_cast<unsigned int>(pkt.protocol_hash));
         }));
 
     // CmdVel (ROS -> MCU)
@@ -59,7 +57,6 @@ inline void register_all(SerialController* node) {
             pkt.horiz_dist = msg->y;
             pkt.height_diff = msg->z;
             node->send_packet(PACKET_ID_SLOPEINFO, pkt);
-            RCLCPP_DEBUG(node->get_logger(), "TX SlopeInfo: angle_deg=%.3f, horiz_dist=%.3f, height_diff=%.3f", static_cast<double>(pkt.angle_deg), static_cast<double>(pkt.horiz_dist), static_cast<double>(pkt.height_diff));
         }));
 
     // MeilinCmd (ROS -> MCU)
@@ -73,7 +70,6 @@ inline void register_all(SerialController* node) {
             pkt.block_height = msg->angular.x;
             pkt.detour = msg->angular.y;
             node->send_packet(PACKET_ID_MEILINCMD, pkt);
-            RCLCPP_DEBUG(node->get_logger(), "TX MeilinCmd: next_block=%.3f, climb_mode=%.3f, slope_angle=%.3f, block_height=%.3f, detour=%.3f", static_cast<double>(pkt.next_block), static_cast<double>(pkt.climb_mode), static_cast<double>(pkt.slope_angle), static_cast<double>(pkt.block_height), static_cast<double>(pkt.detour));
         }));
 
     // ClimbCmd (ROS -> MCU)
@@ -88,7 +84,6 @@ inline void register_all(SerialController* node) {
             pkt.nav_mode = msg->angular.y;
             pkt.height_diff = msg->angular.z;
             node->send_packet(PACKET_ID_CLIMBCMD, pkt);
-            RCLCPP_DEBUG(node->get_logger(), "TX ClimbCmd: climb_mode=%.3f, slope_deg=%.3f, speed_factor=%.3f, torque_factor=%.3f, nav_mode=%.3f, height_diff=%.3f", static_cast<double>(pkt.climb_mode), static_cast<double>(pkt.slope_deg), static_cast<double>(pkt.speed_factor), static_cast<double>(pkt.torque_factor), static_cast<double>(pkt.nav_mode), static_cast<double>(pkt.height_diff));
         }));
 
 }
@@ -108,14 +103,13 @@ struct ProtocolPublishers {
     }
 };
 
-inline void dispatch_packet(ProtocolPublishers& pubs, uint8_t id, const std::vector<uint8_t>& data, const rclcpp::Logger& logger) {
+inline void dispatch_packet(ProtocolPublishers& pubs, uint8_t id, const std::vector<uint8_t>& data) {
     switch(id) {
         case PACKET_ID_HANDSHAKE: {
             if (data.size() != sizeof(Packet_Handshake)) break;
             const Packet_Handshake* pkt = reinterpret_cast<const Packet_Handshake*>(data.data());
             auto msg = std_msgs::msg::UInt32();
             msg.data = pkt->protocol_hash;
-            RCLCPP_DEBUG(logger, "RX Handshake: protocol_hash=%u", static_cast<unsigned int>(pkt->protocol_hash));
             if (pubs.pub_Handshake) {
                 pubs.pub_Handshake->publish(msg);
             }
@@ -126,7 +120,6 @@ inline void dispatch_packet(ProtocolPublishers& pubs, uint8_t id, const std::vec
             const Packet_GripperStatus* pkt = reinterpret_cast<const Packet_GripperStatus*>(data.data());
             auto msg = std_msgs::msg::UInt8();
             msg.data = pkt->status;
-            RCLCPP_DEBUG(logger, "RX GripperStatus: status=%u", static_cast<unsigned int>(pkt->status));
             if (pubs.pub_GripperStatus) {
                 pubs.pub_GripperStatus->publish(msg);
             }
@@ -137,7 +130,6 @@ inline void dispatch_packet(ProtocolPublishers& pubs, uint8_t id, const std::vec
             const Packet_AssemblyStatus* pkt = reinterpret_cast<const Packet_AssemblyStatus*>(data.data());
             auto msg = std_msgs::msg::UInt8();
             msg.data = pkt->status;
-            RCLCPP_DEBUG(logger, "RX AssemblyStatus: status=%u", static_cast<unsigned int>(pkt->status));
             if (pubs.pub_AssemblyStatus) {
                 pubs.pub_AssemblyStatus->publish(msg);
             }
@@ -150,7 +142,6 @@ inline void dispatch_packet(ProtocolPublishers& pubs, uint8_t id, const std::vec
             msg.linear.x = pkt->delta_x;
             msg.linear.y = pkt->delta_y;
             msg.angular.z = pkt->delta_theta;
-            RCLCPP_DEBUG(logger, "RX EncoderFeedback: delta_x=%.3f, delta_y=%.3f, delta_theta=%.3f", static_cast<double>(pkt->delta_x), static_cast<double>(pkt->delta_y), static_cast<double>(pkt->delta_theta));
             if (pubs.pub_EncoderFeedback) {
                 pubs.pub_EncoderFeedback->publish(msg);
             }

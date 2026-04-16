@@ -1,4 +1,4 @@
-// Generated at: 2026-03-25T20:09:47+08:00
+// Generated at: 2026-04-08T22:28:19+08:00
 #pragma once
 #include <stdint.h>
 
@@ -6,13 +6,13 @@
 /* USER CODE END Includes */
 
 // 协议哈希校验码
-#define PROTOCOL_HASH 0x13415FCC
+#define PROTOCOL_HASH 0x2669E2D8
 
 // 校验算法: CRC8
 #define CHECKSUM_ALGO_CRC8 1
 
 // 握手配置
-#define CFG_REQUIRE_HANDSHAKE 1
+#define CFG_REQUIRE_HANDSHAKE 0
 
 // 心跳配置
 #define CFG_ENABLE_HEARTBEAT 1
@@ -33,6 +33,8 @@ typedef enum {
     PACKET_ID_MEILINCMD = 4,
     PACKET_ID_GRIPPERSTATUS = 16,
     PACKET_ID_ASSEMBLYSTATUS = 17,
+    PACKET_ID_ENCODERFEEDBACK = 32,
+    PACKET_ID_CLIMBCMD = 5,
 } PacketID;
 
 #pragma pack(1)
@@ -75,6 +77,21 @@ typedef struct {
     uint8_t status;
 } Packet_AssemblyStatus;
 
+typedef struct {
+    float delta_x;
+    float delta_y;
+    float delta_theta;
+} Packet_EncoderFeedback;
+
+typedef struct {
+    float climb_mode;
+    float slope_deg;
+    float speed_factor;
+    float torque_factor;
+    float nav_mode;
+    float height_diff;
+} Packet_ClimbCmd;
+
 #pragma pack()
 
 // 协议辅助函数声明
@@ -96,6 +113,10 @@ void on_receive_GripperStatus(const Packet_GripperStatus* pkt);
 void send_GripperStatus(const Packet_GripperStatus* pkt);
 void on_receive_AssemblyStatus(const Packet_AssemblyStatus* pkt);
 void send_AssemblyStatus(const Packet_AssemblyStatus* pkt);
+void on_receive_EncoderFeedback(const Packet_EncoderFeedback* pkt);
+void send_EncoderFeedback(const Packet_EncoderFeedback* pkt);
+void on_receive_ClimbCmd(const Packet_ClimbCmd* pkt);
+void send_ClimbCmd(const Packet_ClimbCmd* pkt);
 
 /* USER CODE BEGIN User_Types */
 /* USER CODE END User_Types */

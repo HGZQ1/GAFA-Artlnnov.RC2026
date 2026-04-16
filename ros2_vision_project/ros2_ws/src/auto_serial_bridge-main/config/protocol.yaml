@@ -10,7 +10,7 @@ config:
   head_byte_1: 0x5A
   head_byte_2: 0xA5
   checksum: "CRC8"
-  require_handshake: true
+  require_handshake: false
   enable_heartbeat: true
   qos_depth: 10
   heartbeat_timeout_ms: 3000
@@ -41,7 +41,7 @@ messages:
       - { proto: "protocol_hash", type: "u32", ros: "data" }
   
   # ── 底盘运动指令（Jetson → STM32）──
-  - name: "CmdVel" #底盘
+  - name: "CmdVel" #底盘CmdVel
     id: 0x01
     direction: "tx"
     sub_topic: "/serial/chassis_cmd"
@@ -97,3 +97,27 @@ messages:
       - { proto: "status", type: "u8", ros: "data" } 
       # 0=未组装  1=组装中  2=组装完成  3=失败
 
+# ── 编码器里程计反馈（STM32 → Jetson）──
+  - name: "EncoderFeedback"
+    id: 0x20
+    direction: "rx"
+    pub_topic: "/feedback/encoder"
+    ros_msg: "geometry_msgs/msg/Twist"
+    fields:
+      - { proto: "delta_x",     type: "f32", ros: "linear.x"  }
+      - { proto: "delta_y",     type: "f32", ros: "linear.y"  }
+      - { proto: "delta_theta", type: "f32", ros: "angular.z" }
+
+  # ── 爬坡控制指令（Jetson → STM32）──
+  - name: "ClimbCmd"
+    id: 0x05
+    direction: "tx"
+    sub_topic: "/serial/climb_cmd"
+    ros_msg: "geometry_msgs/msg/Twist"
+    fields:
+      - { proto: "climb_mode",    type: "f32", ros: "linear.x"  }
+      - { proto: "slope_deg",     type: "f32", ros: "linear.y"  }
+      - { proto: "speed_factor",  type: "f32", ros: "linear.z"  }
+      - { proto: "torque_factor", type: "f32", ros: "angular.x" }
+      - { proto: "nav_mode",      type: "f32", ros: "angular.y" }
+      - { proto: "height_diff",   type: "f32", ros: "angular.z" }

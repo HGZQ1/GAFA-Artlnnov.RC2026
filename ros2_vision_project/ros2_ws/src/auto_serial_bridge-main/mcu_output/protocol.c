@@ -1,4 +1,4 @@
-// Generated at: 2026-03-25T20:09:47+08:00
+// Generated at: 2026-04-08T22:28:19+08:00
 #include "protocol.h"
 #include <string.h>
 
@@ -48,10 +48,6 @@ __attribute__((weak)) void on_receive_Heartbeat(const Packet_Heartbeat* pkt) {
 /* USER CODE END on_receive_Heartbeat */
 }
 __attribute__((weak)) void on_receive_Handshake(const Packet_Handshake* pkt) {
-    // Default system behavior: ack matching protocol hash automatically.
-    if (pkt->protocol_hash == PROTOCOL_HASH) {
-        send_Handshake(pkt);
-    }
 /* USER CODE BEGIN on_receive_Handshake */
 /* USER CODE END on_receive_Handshake */
 }
@@ -74,6 +70,14 @@ __attribute__((weak)) void on_receive_GripperStatus(const Packet_GripperStatus* 
 __attribute__((weak)) void on_receive_AssemblyStatus(const Packet_AssemblyStatus* pkt) {
 /* USER CODE BEGIN on_receive_AssemblyStatus */
 /* USER CODE END on_receive_AssemblyStatus */
+}
+__attribute__((weak)) void on_receive_EncoderFeedback(const Packet_EncoderFeedback* pkt) {
+/* USER CODE BEGIN on_receive_EncoderFeedback */
+/* USER CODE END on_receive_EncoderFeedback */
+}
+__attribute__((weak)) void on_receive_ClimbCmd(const Packet_ClimbCmd* pkt) {
+/* USER CODE BEGIN on_receive_ClimbCmd */
+/* USER CODE END on_receive_ClimbCmd */
 }
 
 /* USER CODE BEGIN Code_0 */
@@ -167,6 +171,16 @@ void protocol_fsm_feed(uint8_t byte) {
                     case PACKET_ID_ASSEMBLYSTATUS:
                         if (rx_data_len == sizeof(Packet_AssemblyStatus)) {
                             on_receive_AssemblyStatus((Packet_AssemblyStatus*)rx_buffer);
+                        }
+                        break;
+                    case PACKET_ID_ENCODERFEEDBACK:
+                        if (rx_data_len == sizeof(Packet_EncoderFeedback)) {
+                            on_receive_EncoderFeedback((Packet_EncoderFeedback*)rx_buffer);
+                        }
+                        break;
+                    case PACKET_ID_CLIMBCMD:
+                        if (rx_data_len == sizeof(Packet_ClimbCmd)) {
+                            on_receive_ClimbCmd((Packet_ClimbCmd*)rx_buffer);
                         }
                         break;
 
@@ -300,6 +314,40 @@ void send_AssemblyStatus(const Packet_AssemblyStatus* pkt) {
     
     memcpy(&buffer[idx], pkt, sizeof(Packet_AssemblyStatus));
     idx += sizeof(Packet_AssemblyStatus);
+    
+    buffer[idx] = calculate_checksum(&buffer[2], idx - 2);
+    idx++;
+    
+    serial_write(buffer, idx);
+}
+void send_EncoderFeedback(const Packet_EncoderFeedback* pkt) {
+    uint8_t buffer[4 + sizeof(Packet_EncoderFeedback) + 1];
+    uint16_t idx = 0;
+    
+    buffer[idx++] = FRAME_HEADER1;
+    buffer[idx++] = FRAME_HEADER2;
+    buffer[idx++] = PACKET_ID_ENCODERFEEDBACK;
+    buffer[idx++] = sizeof(Packet_EncoderFeedback);
+    
+    memcpy(&buffer[idx], pkt, sizeof(Packet_EncoderFeedback));
+    idx += sizeof(Packet_EncoderFeedback);
+    
+    buffer[idx] = calculate_checksum(&buffer[2], idx - 2);
+    idx++;
+    
+    serial_write(buffer, idx);
+}
+void send_ClimbCmd(const Packet_ClimbCmd* pkt) {
+    uint8_t buffer[4 + sizeof(Packet_ClimbCmd) + 1];
+    uint16_t idx = 0;
+    
+    buffer[idx++] = FRAME_HEADER1;
+    buffer[idx++] = FRAME_HEADER2;
+    buffer[idx++] = PACKET_ID_CLIMBCMD;
+    buffer[idx++] = sizeof(Packet_ClimbCmd);
+    
+    memcpy(&buffer[idx], pkt, sizeof(Packet_ClimbCmd));
+    idx += sizeof(Packet_ClimbCmd);
     
     buffer[idx] = calculate_checksum(&buffer[2], idx - 2);
     idx++;
