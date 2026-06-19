@@ -1,0 +1,344 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rc2026_robot">
+
+  <!-- ============================================================
+       RC2026 机器人 URDF (xacro 参数化)
+       底盘: 八边形框架 + 四轮万向轮
+       传感器: D435i 相机 + Mid-360S 激光雷达
+       机械臂: 占位符 link, 待组员开发后替换
+       ============================================================ -->
+
+  <!-- 底盘参数 (可通过 xacro 参数覆盖) -->
+  <xacro:arg name="chassis_width"   default="0.80003"/>
+  <xacro:arg name="chassis_depth"   default="0.70025"/>
+  <xacro:arg name="chassis_height"  default="0.50798"/>
+  <xacro:arg name="wheel_radius"    default="0.053905"/>
+  <xacro:arg name="wheel_width"     default="0.045"/>
+  <xacro:arg name="wheel_base_x"    default="0.27"/>
+  <xacro:arg name="wheel_base_y"    default="0.25"/>
+
+  <!-- 传感器安装位置 -->
+  <xacro:arg name="camera_x" default="0.05"/>
+  <xacro:arg name="camera_y" default="0.0"/>
+  <xacro:arg name="camera_z" default="0.45"/>
+  <xacro:arg name="lidar_x"  default="0.0"/>
+  <xacro:arg name="lidar_y"  default="0.0"/>
+  <xacro:arg name="lidar_z"  default="0.55"/>
+
+  <!-- 机械臂安装位置 -->
+  <xacro:arg name="arm_x" default="0.0"/>
+  <xacro:arg name="arm_y" default="0.0"/>
+  <xacro:arg name="arm_z" default="0.05"/>
+
+  <xacro:property name="cw"  value="$(arg chassis_width)"/>
+  <xacro:property name="cd"  value="$(arg chassis_depth)"/>
+  <xacro:property name="ch"  value="$(arg chassis_height)"/>
+  <xacro:property name="wr"  value="$(arg wheel_radius)"/>
+  <xacro:property name="ww"  value="$(arg wheel_width)"/>
+  <xacro:property name="wbx" value="$(arg wheel_base_x)"/>
+  <xacro:property name="wby" value="$(arg wheel_base_y)"/>
+
+  <!-- ══════════════ 材质定义 ══════════════ -->
+  <material name="grey">
+    <color rgba="0.6 0.6 0.6 1.0"/>
+  </material>
+  <material name="dark_grey">
+    <color rgba="0.3 0.3 0.3 1.0"/>
+  </material>
+  <material name="red">
+    <color rgba="0.8 0.1 0.1 1.0"/>
+  </material>
+  <material name="blue">
+    <color rgba="0.1 0.1 0.8 1.0"/>
+  </material>
+  <material name="green">
+    <color rgba="0.1 0.6 0.1 1.0"/>
+  </material>
+
+  <!-- ══════════════ base_footprint ══════════════ -->
+  <link name="base_footprint"/>
+
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${wr}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ══════════════ base_link (底盘主体) ══════════════ -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="${cw} ${cd} 0.08"/>
+      </geometry>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+      <material name="red"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${cw} ${cd} 0.08"/>
+      </geometry>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="25.0"/>
+      <inertia ixx="1.0" ixy="0" ixz="0" iyy="1.0" iyz="0" izz="1.5"/>
+    </inertial>
+  </link>
+
+  <!-- ══════════════ 框架上部结构 ══════════════ -->
+  <link name="frame_upper">
+    <visual>
+      <geometry>
+        <box size="${cw} ${cd} ${ch}"/>
+      </geometry>
+      <origin xyz="0 0 ${ch/2}" rpy="0 0 0"/>
+      <material name="grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${cw} ${cd} ${ch}"/>
+      </geometry>
+      <origin xyz="0 0 ${ch/2}" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="5.0"/>
+      <origin xyz="0 0 ${ch/2}"/>
+      <inertia ixx="0.3" ixy="0" ixz="0" iyy="0.3" iyz="0" izz="0.2"/>
+    </inertial>
+  </link>
+
+  <joint name="frame_upper_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="frame_upper"/>
+    <origin xyz="0 0 0.08" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ══════════════ 万向轮宏定义 ══════════════ -->
+  <xacro:macro name="omni_wheel" params="name x y">
+    <link name="${name}_link">
+      <visual>
+        <geometry>
+          <cylinder radius="${wr}" length="${ww}"/>
+        </geometry>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <material name="dark_grey"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${wr}" length="${ww}"/>
+        </geometry>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+      </collision>
+      <inertial>
+        <mass value="0.8"/>
+        <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <joint name="${name}_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="${x} ${y} 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.1" friction="0.05"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- 四个万向轮 -->
+  <xacro:omni_wheel name="wheel_fl" x="${wbx}"  y="${wby}"/>
+  <xacro:omni_wheel name="wheel_fr" x="${wbx}"  y="${-wby}"/>
+  <xacro:omni_wheel name="wheel_rl" x="${-wbx}" y="${wby}"/>
+  <xacro:omni_wheel name="wheel_rr" x="${-wbx}" y="${-wby}"/>
+
+  <!-- ══════════════ 相机 (Intel RealSense D435i) ══════════════ -->
+  <link name="camera_link">
+    <visual>
+      <geometry>
+        <box size="0.025 0.09 0.025"/>
+      </geometry>
+      <material name="grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.025 0.09 0.025"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.072"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="$(arg camera_x) $(arg camera_y) $(arg camera_z)"
+            rpy="0 0 0"/>
+  </joint>
+
+  <!-- D435i 光学坐标系 (Z前 X右 Y下) -->
+  <link name="camera_optical_frame"/>
+
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+  </joint>
+
+  <!-- ══════════════ 激光雷达 (Livox Mid-360S) ══════════════ -->
+  <link name="lidar_link">
+    <visual>
+      <geometry>
+        <cylinder radius="0.05" length="0.06"/>
+      </geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.05" length="0.06"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.265"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="$(arg lidar_x) $(arg lidar_y) $(arg lidar_z)"
+            rpy="0 0 0"/>
+  </joint>
+
+  <!-- ══════════════ 武器头机械臂底座 (占位, 位置待定, 需现场测量标定) ══════════════ -->
+  <!-- 用于夹取武器端头, 拾取/释放指令由 ActionGroupCmd id=1/2 发送,
+       下位机自动控制对应机械臂, 上位机无需区分两臂。
+       安装位置不会远离 D435i 相机(camera_link), 下方 xyz 为临时占位,
+       确定安装点后用卷尺测量相对 base_link 的实际偏移并替换。 -->
+  <link name="weapon_arm_base_link">
+    <visual>
+      <geometry>
+        <cylinder radius="0.03" length="0.02"/>
+      </geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.03" length="0.02"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <joint name="weapon_arm_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="weapon_arm_base_link"/>
+    <!-- TODO: 现场测量后替换 xyz，当前为占位值 (靠近相机前方) -->
+    <origin xyz="0.05 0.15 0.30" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ══════════════ KFS机械臂底座 (占位符, 待组员替换) ══════════════ -->
+  <link name="arm_base_link">
+    <visual>
+      <geometry>
+        <cylinder radius="0.03" length="0.02"/>
+      </geometry>
+      <material name="green"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.03" length="0.02"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <joint name="arm_base_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="arm_base_link"/>
+    <origin xyz="$(arg arm_x) $(arg arm_y) $(arg arm_z)"
+            rpy="0 0 0"/>
+  </joint>
+
+  <!-- ══════════════ 机械臂展开姿态 (精对齐用, 占位几何, 需现场标定) ══════════════ -->
+  <!-- 代表机械臂完全抬升+前伸+末端旋转朝下后(精对齐动作组完成姿态),
+       末端横杆中心相对 arm_base_link 的固定位姿。
+       现实现为固定坐标系(单一展开姿态), 不建模抬升/前伸的连续关节,
+       因为精对齐阶段不调整机械臂本身位姿, 误差直接转换为底盘 vx/vy。
+       下方 xyz 数值为占位估测, 需结合实物测量校正。 -->
+  <link name="arm_deployed_link"/>
+
+  <joint name="arm_deployed_joint" type="fixed">
+    <parent link="arm_base_link"/>
+    <child link="arm_deployed_link"/>
+    <origin xyz="0.30 0 0.40" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ══════════════ USB 相机 (末端横杆, 精对齐用, 镜头朝下) ══════════════ -->
+  <link name="usb_camera_link">
+    <visual>
+      <geometry>
+        <box size="0.03 0.03 0.03"/>
+      </geometry>
+      <material name="dark_grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.03 0.03 0.03"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <joint name="usb_camera_joint" type="fixed">
+    <parent link="arm_deployed_link"/>
+    <child link="usb_camera_link"/>
+    <!-- 镜头朝下: 绕Y轴+90°使 camera_link 的 X(前) 轴指向 -Z(地面) -->
+    <origin xyz="0 0 0" rpy="0 ${pi/2} 0"/>
+  </joint>
+
+  <!-- USB 相机光学坐标系 (Z指向镜头朝向/地面, X右 Y下), 供图像处理使用 -->
+  <link name="usb_camera_optical_frame"/>
+
+  <joint name="usb_camera_optical_joint" type="fixed">
+    <parent link="usb_camera_link"/>
+    <child link="usb_camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+  </joint>
+
+  <!-- ══════════════ 吸盘 (末端横杆, 与USB相机存在小偏移, 需现场标定) ══════════════ -->
+  <link name="suction_link">
+    <visual>
+      <geometry>
+        <cylinder radius="0.025" length="0.02"/>
+      </geometry>
+      <material name="green"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.025" length="0.02"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <joint name="suction_joint" type="fixed">
+    <parent link="arm_deployed_link"/>
+    <child link="suction_link"/>
+    <origin xyz="0.03 0 -0.02" rpy="0 0 0"/>
+  </joint>
+
+</robot>

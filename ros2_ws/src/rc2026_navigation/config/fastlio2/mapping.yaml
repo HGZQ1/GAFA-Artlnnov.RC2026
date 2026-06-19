@@ -1,0 +1,45 @@
+# FAST-LIO2 建图模式参数
+# 适配 Livox Mid-360S
+# 参考 pb_rm_simulation/config/reality/fastlio_mid360_real.yaml
+
+common:
+  lid_topic: "/livox/lidar"
+  imu_topic: "/imu/data"            # 与 pb_rm_simulation 一致，通过 launch 重映射
+  time_sync_en: false
+  time_offset_lidar_to_imu: 0.0
+
+preprocess:
+  lidar_type: 1                      # 1=Livox
+  scan_line: 4
+  blind: 0.5
+  feature_extract_enable: false      # Mid-360 不需要特征提取
+  point_filter_num: 3
+
+mapping:
+  max_iteration: 3
+  acc_cov: 0.1
+  gyr_cov: 0.1
+  b_acc_cov: 0.001                   # pb_rm 用 0.001
+  b_gyr_cov: 0.001
+  fov_degree: 360.0
+  det_range: 100.0                   # pb_rm 用 100m
+  filter_size_surf: 0.5
+  filter_size_map: 0.5
+  extrinsic_est_en: false
+  # Mid-360S → IMU 外参（livox_frame 内 IMU 和 LiDAR 同体，单位为零）
+  extrinsic_T: [0.0, 0.0, 0.0]
+  extrinsic_R: [1.0, 0.0, 0.0,
+                0.0, 1.0, 0.0,
+                0.0, 0.0, 1.0]
+
+publish:
+  path_en: true
+  scan_publish_en: true
+  dense_publish_en: false
+  scan_bodyframe_pub_en: true
+  map_publish_en: true
+
+pcd_save:
+  pcd_save_en: true
+  interval: -1                       # 只在退出时保存
+  # pcd_save_path: ""                # 默认保存到 ~/.ros/

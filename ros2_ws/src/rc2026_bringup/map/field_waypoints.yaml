@@ -1,0 +1,178 @@
+key_points:
+  kfs_approach:
+    label: 九宫格接近点
+    x: 0.82
+    y: 1.11
+    yaw: 3.14159
+  slope_entry:
+    label: 坡道入口 (Zone2侧)
+    x: 5.25
+    y: 2.7
+    yaw: -1.571
+  tip_rack_approach:
+    label: 端头架接近点
+    x: 0.7
+    y: 10.515
+    yaw: 3.14159
+robot_start:
+  x: 1.4
+  y: 11.6
+  yaw: -1.571
+steps:
+  step_01:
+    approach_pose:
+      x: 1.0
+      y: 8.2
+      yaw: 0.0
+    center:
+      x: 1.8
+      y: 8.2
+    col: 0
+    height_mm: 400
+    label: 梅林方块1
+    row: 0
+  step_02:
+    approach_pose:
+      x: 3.0
+      y: 9.0
+      yaw: -1.571
+    center:
+      x: 3.0
+      y: 8.2
+    col: 1
+    height_mm: 200
+    label: 梅林方块2
+    row: 0
+  step_03:
+    approach_pose:
+      x: 5.0
+      y: 8.2
+      yaw: 3.142
+    center:
+      x: 4.2
+      y: 8.2
+    col: 2
+    height_mm: 400
+    label: 梅林方块3
+    row: 0
+  step_04:
+    approach_pose:
+      x: 1.0
+      y: 7.0
+      yaw: 0.0
+    center:
+      x: 1.8
+      y: 7.0
+    col: 0
+    height_mm: 600
+    label: 梅林方块4
+    row: 1
+  step_05:
+    approach_pose:
+      x: 3.0
+      y: 6.2
+      yaw: 1.571
+    center:
+      x: 3.0
+      y: 7.0
+    col: 1
+    height_mm: 400
+    label: 梅林方块5
+    row: 1
+  step_06:
+    approach_pose:
+      x: 5.0
+      y: 7.0
+      yaw: 3.142
+    center:
+      x: 4.2
+      y: 7.0
+    col: 2
+    height_mm: 200
+    label: 梅林方块6
+    row: 1
+  step_07:
+    approach_pose:
+      x: 1.0
+      y: 5.8
+      yaw: 0.0
+    center:
+      x: 1.8
+      y: 5.8
+    col: 0
+    height_mm: 400
+    label: 梅林方块7
+    row: 2
+  step_08:
+    approach_pose:
+      x: 3.0
+      y: 5.0
+      yaw: 1.571
+    center:
+      x: 3.0
+      y: 5.8
+    col: 1
+    height_mm: 600
+    label: 梅林方块8
+    row: 2
+  step_09:
+    approach_pose:
+      x: 5.0
+      y: 5.8
+      yaw: 3.142
+    center:
+      x: 4.2
+      y: 5.8
+    col: 2
+    height_mm: 400
+    label: 梅林方块9
+    row: 2
+  step_10:
+    approach_pose:
+      x: 1.0
+      y: 4.6
+      yaw: 0.0
+    center:
+      x: 1.8
+      y: 4.6
+    col: 0
+    height_mm: 200
+    label: 梅林方块10
+    row: 3
+  step_11:
+    approach_pose:
+      x: 3.0
+      y: 3.8
+      yaw: 1.571
+    center:
+      x: 3.0
+      y: 4.6
+    col: 1
+    height_mm: 400
+    label: 梅林方块11
+    row: 3
+  step_12:
+    approach_pose:
+      x: 5.0
+      y: 4.6
+      yaw: 3.142
+    center:
+      x: 4.2
+      y: 4.6
+    col: 2
+    height_mm: 200
+    label: 梅林方块12
+    row: 3
+zones:
+  zone1_weapons:
+    platform_mm: 150
+    y_max: 12.0
+    y_min: 10.0
+  zone2_forest:
+    platform_mm: 50
+    y_max: 10.0
+    y_min: 2.7
+  zone3_arena:
+    platform_mm: 450
+    y_max: 2.7
+    y_min: 0.0

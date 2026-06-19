@@ -1,0 +1,393 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rc2026_robot">
+
+  <!-- ============================================================
+       RC2026 机器人 URDF (xacro 参数化)
+       底盘: 八边形框架 + 四轮万向轮
+       传感器: D435i 相机 + Mid-360S 激光雷达
+       机械臂: 占位符 link, 待组员开发后替换
+       ============================================================ -->
+
+  <!-- 是否由 planar_move 发布 odom→base_footprint TF
+       (设为 false 时由 odom_drift_injector 节点替代发布, 用于注入累积里程计漂移) -->
+  <xacro:arg name="publish_odom_tf" default="true"/>
+
+  <!-- 底盘参数 (可通过 xacro 参数覆盖) -->
+  <xacro:arg name="chassis_width"   default="0.70"/>
+  <xacro:arg name="chassis_depth"   default="0.70"/>
+  <xacro:arg name="chassis_height"  default="0.40"/>
+  <xacro:arg name="wheel_radius"    default="0.053905"/>
+  <xacro:arg name="wheel_width"     default="0.045"/>
+  <xacro:arg name="wheel_base_x"    default="0.27"/>
+  <xacro:arg name="wheel_base_y"    default="0.25"/>
+
+  <!-- 传感器安装位置 -->
+  <xacro:arg name="camera_x" default="0.05"/>
+  <xacro:arg name="camera_y" default="0.0"/>
+  <xacro:arg name="camera_z" default="0.45"/>
+  <xacro:arg name="lidar_x"  default="0.0"/>
+  <xacro:arg name="lidar_y"  default="0.0"/>
+  <xacro:arg name="lidar_z"  default="0.55"/>
+
+  <!-- 机械臂安装位置 -->
+  <xacro:arg name="arm_x" default="0.0"/>
+  <xacro:arg name="arm_y" default="0.0"/>
+  <xacro:arg name="arm_z" default="0.05"/>
+
+  <xacro:property name="cw"  value="$(arg chassis_width)"/>
+  <xacro:property name="cd"  value="$(arg chassis_depth)"/>
+  <xacro:property name="ch"  value="$(arg chassis_height)"/>
+  <xacro:property name="wr"  value="$(arg wheel_radius)"/>
+  <xacro:property name="ww"  value="$(arg wheel_width)"/>
+  <xacro:property name="wbx" value="$(arg wheel_base_x)"/>
+  <xacro:property name="wby" value="$(arg wheel_base_y)"/>
+
+  <!-- ══════════════ 材质定义 ══════════════ -->
+  <material name="grey">
+    <color rgba="0.6 0.6 0.6 1.0"/>
+  </material>
+  <material name="dark_grey">
+    <color rgba="0.3 0.3 0.3 1.0"/>
+  </material>
+  <material name="red">
+    <color rgba="0.8 0.1 0.1 1.0"/>
+  </material>
+  <material name="blue">
+    <color rgba="0.1 0.1 0.8 1.0"/>
+  </material>
+  <material name="green">
+    <color rgba="0.1 0.6 0.1 1.0"/>
+  </material>
+
+  <!-- ══════════════ base_footprint ══════════════ -->
+  <link name="base_footprint"/>
+
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${wr}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ══════════════ base_link (底盘主体) ══════════════ -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="${cw} ${cd} 0.08"/>
+      </geometry>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+      <material name="red"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${cw} ${cd} 0.08"/>
+      </geometry>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="25.0"/>
+      <inertia ixx="1.0" ixy="0" ixz="0" iyy="1.0" iyz="0" izz="1.5"/>
+    </inertial>
+  </link>
+
+  <!-- ══════════════ 框架上部结构 ══════════════ -->
+  <link name="frame_upper">
+    <visual>
+      <geometry>
+        <box size="${cw} ${cd} ${ch}"/>
+      </geometry>
+      <origin xyz="0 0 ${ch/2}" rpy="0 0 0"/>
+      <material name="grey"/>
+    </visual>
+    <!-- collision 已移除: 避免 Gazebo 激光雷达射线命中自身框架 -->
+    <inertial>
+      <mass value="5.0"/>
+      <origin xyz="0 0 ${ch/2}"/>
+      <inertia ixx="0.3" ixy="0" ixz="0" iyy="0.3" iyz="0" izz="0.2"/>
+    </inertial>
+  </link>
+
+  <joint name="frame_upper_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="frame_upper"/>
+    <origin xyz="0 0 0.08" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ══════════════ 万向轮宏定义 ══════════════ -->
+  <xacro:macro name="omni_wheel" params="name x y">
+    <link name="${name}_link">
+      <visual>
+        <geometry>
+          <cylinder radius="${wr}" length="${ww}"/>
+        </geometry>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <material name="dark_grey"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${wr}" length="${ww}"/>
+        </geometry>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+      </collision>
+      <inertial>
+        <mass value="0.8"/>
+        <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <joint name="${name}_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="${x} ${y} 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.1" friction="0.05"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- 四个万向轮 -->
+  <xacro:omni_wheel name="wheel_fl" x="${wbx}"  y="${wby}"/>
+  <xacro:omni_wheel name="wheel_fr" x="${wbx}"  y="${-wby}"/>
+  <xacro:omni_wheel name="wheel_rl" x="${-wbx}" y="${wby}"/>
+  <xacro:omni_wheel name="wheel_rr" x="${-wbx}" y="${-wby}"/>
+
+  <!-- ══════════════ 相机 (Intel RealSense D435i) ══════════════ -->
+  <link name="camera_link">
+    <visual>
+      <geometry>
+        <box size="0.025 0.09 0.025"/>
+      </geometry>
+      <material name="grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.025 0.09 0.025"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.072"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="$(arg camera_x) $(arg camera_y) $(arg camera_z)"
+            rpy="0 0 0"/>
+  </joint>
+
+  <!-- D435i 光学坐标系 (Z前 X右 Y下) -->
+  <link name="camera_optical_frame"/>
+
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+  </joint>
+
+  <!-- ══════════════ 激光雷达 (Livox Mid-360S) ══════════════ -->
+  <link name="lidar_link">
+    <visual>
+      <geometry>
+        <cylinder radius="0.05" length="0.06"/>
+      </geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.05" length="0.06"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.265"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="$(arg lidar_x) $(arg lidar_y) $(arg lidar_z)"
+            rpy="0 0 0"/>
+  </joint>
+
+  <!-- ══════════════ 机械臂底座 (占位符, 待组员替换) ══════════════ -->
+  <link name="arm_base_link">
+    <visual>
+      <geometry>
+        <cylinder radius="0.03" length="0.02"/>
+      </geometry>
+      <material name="green"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.03" length="0.02"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <joint name="arm_base_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="arm_base_link"/>
+    <origin xyz="$(arg arm_x) $(arg arm_y) $(arg arm_z)"
+            rpy="0 0 0"/>
+  </joint>
+
+  <!--
+    机械臂关节链占位:
+    arm_base_link 之后的关节由机械臂组员在此处扩展.
+    接口约定:
+      - 末端执行器 link 命名: arm_end_effector_link
+      - 夹爪 link 命名: gripper_link
+      - 所有关节使用 revolute 类型
+  -->
+
+  <!-- ══════════════════════════════════════════════════════════
+       Gazebo 仿真插件
+       ══════════════════════════════════════════════════════════ -->
+
+  <!-- Gazebo 物理属性: 底盘底部摩擦 -->
+  <gazebo reference="base_link">
+    <mu1>0.2</mu1>
+    <mu2>0.2</mu2>
+    <material>Gazebo/Red</material>
+  </gazebo>
+
+  <gazebo reference="frame_upper">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+
+  <!-- 轮子高摩擦 -->
+  <xacro:macro name="wheel_gazebo" params="name">
+    <gazebo reference="${name}_link">
+      <mu1>1.5</mu1>
+      <mu2>1.5</mu2>
+      <material>Gazebo/DarkGrey</material>
+    </gazebo>
+  </xacro:macro>
+  <xacro:wheel_gazebo name="wheel_fl"/>
+  <xacro:wheel_gazebo name="wheel_fr"/>
+  <xacro:wheel_gazebo name="wheel_rl"/>
+  <xacro:wheel_gazebo name="wheel_rr"/>
+
+  <!-- ── 全向底盘驱动 (planar_move) ──
+       订阅 /cmd_vel (Twist), 直接驱动机器人平移+旋转
+       发布 /odom (Odometry) + odom→base_footprint TF -->
+  <gazebo>
+    <plugin name="planar_move" filename="libgazebo_ros_planar_move.so">
+      <ros>
+        <remapping>cmd_vel:=/cmd_vel</remapping>
+        <remapping>odom:=/odom</remapping>
+      </ros>
+      <update_rate>50</update_rate>
+      <publish_rate>50</publish_rate>
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>$(arg publish_odom_tf)</publish_odom_tf>
+      <odometry_frame>odom</odometry_frame>
+      <robot_base_frame>base_footprint</robot_base_frame>
+    </plugin>
+  </gazebo>
+
+  <!-- ── RGB 相机仿真 ── -->
+  <gazebo reference="camera_link">
+    <material>Gazebo/Grey</material>
+    <sensor type="camera" name="rgb_camera">
+      <update_rate>30</update_rate>
+      <camera>
+        <horizontal_fov>1.211</horizontal_fov>
+        <image>
+          <width>1280</width>
+          <height>720</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>10.0</far>
+        </clip>
+      </camera>
+      <plugin name="camera_controller" filename="libgazebo_ros_camera.so">
+        <ros>
+          <remapping>image_raw:=/camera/camera/color/image_raw</remapping>
+          <remapping>camera_info:=/camera/camera/color/camera_info</remapping>
+        </ros>
+        <frame_name>camera_optical_frame</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ── 3D 激光雷达 (模拟 Livox Mid-360S, 输出 PointCloud2) ── -->
+  <gazebo reference="lidar_link">
+    <material>Gazebo/Blue</material>
+    <sensor type="ray" name="lidar_3d">
+      <update_rate>10</update_rate>
+      <visualize>false</visualize>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+          <vertical>
+            <samples>16</samples>
+            <resolution>1</resolution>
+            <min_angle>-0.1309</min_angle>
+            <max_angle>0.6109</max_angle>
+          </vertical>
+        </scan>
+        <range>
+          <min>0.1</min>
+          <max>40.0</max>
+          <resolution>0.01</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.01</stddev>
+        </noise>
+      </ray>
+      <plugin name="lidar_3d_controller" filename="libgazebo_ros_ray_sensor.so">
+        <ros>
+          <remapping>~/out:=/livox/lidar</remapping>
+        </ros>
+        <output_type>sensor_msgs/PointCloud2</output_type>
+        <frame_name>lidar_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ── 2D 激光扫描 (从3D点云提取水平层, 供 AMCL 定位) ── -->
+  <gazebo reference="lidar_link">
+    <sensor type="ray" name="lidar_2d">
+      <update_rate>10</update_rate>
+      <visualize>false</visualize>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.1</min>
+          <max>40.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+      <plugin name="lidar_2d_controller" filename="libgazebo_ros_ray_sensor.so">
+        <ros>
+          <remapping>~/out:=/scan</remapping>
+        </ros>
+        <output_type>sensor_msgs/LaserScan</output_type>
+        <frame_name>lidar_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+</robot>

@@ -1,0 +1,7 @@
+# base_link → livox_frame 静态TF参数
+# 参考 pb_rm_simulation 的 measurement_params_real.yaml
+# LiDAR 安装在底盘上方，需实际测量后修改
+
+base_link2livox_frame:
+  xyz: "0.0 0.0 0.55"             # 前方0m, 侧向0m, 高度0.55m (待实测)
+  rpy: "0.0 0.0 0.0"              # 无旋转 (待实测)

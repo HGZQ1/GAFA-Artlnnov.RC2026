@@ -1,0 +1,192 @@
+# ============================================================
+#  RC2026 机器人物理参数集中管理
+#  所有底盘、传感器、运动控制参数统一在此配置
+#  修改底盘数据只需改这个文件
+# ============================================================
+
+# ── 底盘几何参数（单位：米，来自机械组 Blender 模型） ──
+chassis:
+  type: "omni4"                    # 底盘类型: omni4(四轮万向轮) / mecanum / diff
+  frame_width: 0.80003             # 内框宽度 (X方向, mm→m)
+  frame_depth: 0.70025             # 内框深度 (Y方向, mm→m)
+  frame_diagonal: 0.88584          # 外框对角线尺寸
+  frame_height: 0.50798            # 框架高度（不含轮子）
+  frame_shape: "octagon"           # 框架形状: octagon(八边形)
+
+  # 轮子参数
+  wheel:
+    type: "omni"                   # 轮子类型: omni(万向轮) / mecanum / standard
+    diameter: 0.10781              # 轮子直径 (107.81mm)
+    radius: 0.053905               # 轮子半径
+    width: 0.045                   # 轮子宽度（待机械组确认）
+    count: 4                       # 驱动轮数量
+
+  # 轮子安装位置（相对底盘中心, 单位：米）
+  # 根据顶视图测量，四个万向轮分布在底盘四个方向
+  # 角度定义：从X轴正方向逆时针，右手坐标系
+  # wheel_angle: 每个轮子的滚动方向角度（度）
+  wheel_positions:
+    front_left:
+      x:  0.27                     # 待机械组确认精确值
+      y:  0.25
+      angle: 45.0                  # 滚动方向角度
+    front_right:
+      x:  0.27
+      y: -0.25
+      angle: -45.0
+    rear_left:
+      x: -0.27
+      y:  0.25
+      angle: -45.0
+    rear_right:
+      x: -0.27
+      y: -0.25
+      angle: 45.0
+
+  # 轮距和轴距（用于简化运动学计算）
+  wheel_base_x: 0.54               # 前后轮中心距 (2 * 0.27)
+  wheel_base_y: 0.50               # 左右轮中心距 (2 * 0.25)
+  wheel_separation_half: 0.375     # (wheel_base_x/2 + wheel_base_y/2)
+
+  # 底盘质量与惯性（待机械组提供精确值）
+  mass: 25.0                       # 总质量 kg（含电池、电控，不含机械臂）
+  max_payload: 5.0                 # 最大负载 kg
+
+  # 底盘运动限制
+  max_linear_vel: 1.5              # 最大线速度 m/s
+  max_angular_vel: 3.14            # 最大角速度 rad/s (约180°/s)
+  max_linear_accel: 2.0            # 最大线加速度 m/s^2
+  max_angular_accel: 6.28          # 最大角加速度 rad/s^2
+
+  # 底盘附加尺寸（用于碰撞检测和导航避障）
+  footprint_radius: 0.50           # 外接圆半径（含所有突出部分）
+  footprint_polygon:               # 八边形轮廓顶点 (x,y) 用于Nav2 costmap
+    - [ 0.40,  0.18]
+    - [ 0.18,  0.40]
+    - [-0.18,  0.40]
+    - [-0.40,  0.18]
+    - [-0.40, -0.18]
+    - [-0.18, -0.40]
+    - [ 0.18, -0.40]
+    - [ 0.40, -0.18]
+
+  # 爬坡机构（蓝色线性推杆）
+  climb_actuator:
+    stroke: 0.50798                # 推杆行程 (507.98mm)
+    count: 4                       # 推杆数量
+    max_force: 500.0               # 最大推力 N（待确认）
+
+  # 兼容旧代码的参数（映射到新结构）
+  wheel_diameter_m: 0.10781        # = wheel.diameter
+  track_width_m: 0.50              # = wheel_base_y（万向轮取左右轮距）
+
+# ── 相机安装参数（Intel RealSense D435i） ──
+camera:
+  frame_id: "camera_link"
+  offset_x:  0.05                  # 相对base_link前方偏移 (米)
+  offset_y:  0.0                   # 横向偏移 (米, 正=左)
+  offset_z:  0.45                  # 高度偏移 (米, 从底盘底面算)
+  roll:  0.0                       # 安装滚转角 (弧度)
+  pitch: 0.0                       # 安装俯仰角 (弧度)
+  yaw:   0.0                       # 安装偏航角 (弧度)
+  # RealSense话题
+  color_topic: "/camera/camera/color/image_raw"
+  depth_topic: "/camera/camera/aligned_depth_to_color/image_raw"
+  info_topic:  "/camera/camera/color/camera_info"
+  imu_topic:   "/camera/camera/imu"
+
+# ── 激光雷达安装参数（Livox Mid-360S） ──
+lidar:
+  frame_id: "lidar_link"
+  offset_x:  0.0                   # 相对base_link偏移 (米)
+  offset_y:  0.0
+  offset_z:  0.55                  # 安装在框架顶部（待确认）
+  roll:  0.0
+  pitch: 0.0
+  yaw:   0.0
+
+# ── 机械臂安装参数（预留，待组员开发后填入） ──
+arm:
+  frame_id: "arm_base_link"
+  offset_x:  0.0                   # 相对base_link偏移 (米)
+  offset_y:  0.0
+  offset_z:  0.05
+  roll:  0.0
+  pitch: 0.0
+  yaw:   0.0
+  # 机械臂通信接口话题
+  topics:
+    target_pos:    "/arm/target_pos"       # PointStamped: 目标位置
+    action_cmd:    "/arm/action_cmd"       # String: 动作指令
+    joint_cmd:     "/serial/arm_joint_cmd" # Float32MultiArray: 关节角度
+    gripper_cmd:   "/serial/arm_gripper_cmd"  # UInt8: 夹爪指令
+    joint_feedback: "/feedback/arm_joints"  # Float32MultiArray: 关节反馈
+    status:        "/arm/status"           # String: 机械臂状态
+
+# ── 运动控制参数 ──
+motion:
+  stop_distance_m: 0.50            # 停止距离
+  arrival_threshold_m: 0.55        # 到达判定距离
+  align_threshold_deg: 5.0         # 对齐角度阈值
+
+# ── 决策参数 ──
+decision:
+  pick_duration_s: 10.0            # 拾取超时
+  arrival_settle_s: 1.0            # 到达后稳定时间
+  conf_threshold: 0.5              # 通用置信度阈值
+  confirm_frames: 3                # 确认帧数
+  lost_frames: 5                   # 丢失帧数
+  max_jump_m: 0.8                  # 最大跳变距离
+
+# ── PID 控制参数 ──
+pid:
+  linear:
+    kp: 0.8
+    ki: 0.3
+    kd: 0.02
+    max_output: 1.5                # = chassis.max_linear_vel
+    deadband: 0.01
+  angular:
+    kp: 1.5
+    ki: 0.2
+    kd: 0.01
+    max_output: 3.14               # = chassis.max_angular_vel
+    deadband: 0.02
+
+# ── IMU / 坡度参数 ──
+imu:
+  comp_alpha: 0.96
+  gravity: 9.81
+  accel_sign: [1, 1, 1]           # [x, y, z] 符号修正
+  slope_detect_deg: 3.0
+  slope_levels:                    # [mild, moderate, steep] 角度阈值
+    mild: 8.0
+    moderate: 15.0
+    steep: 25.0
+  speed_factors:                   # 各坡度下的速度系数
+    flat: 1.0
+    mild: 0.7
+    moderate: 0.45
+    steep: 0.25
+  torque_factors:
+    flat: 0.5
+    mild: 0.7
+    moderate: 0.85
+    steep: 1.0
+  brake_factor_slope: 0.6
+
+# ── 编码器/里程计参数 ──
+odometry:
+  encoder_rate_hz: 50
+  drift_factor: 0.02
+  feedback_topic: "/feedback/encoder"
+  chassis_vel_topic: "/feedback/chassis_vel"
+
+# ── TF 坐标系定义 ──
+frames:
+  base_link: "base_link"
+  camera: "camera_link"
+  lidar: "lidar_link"
+  arm_base: "arm_base_link"
+  odom: "odom"
+  map: "map"

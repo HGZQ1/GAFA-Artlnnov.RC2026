@@ -1,0 +1,29 @@
+name: Public Sample Checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  public_sample_checks:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            python3-pytest \
+            python3-yaml
+
+      - name: Sample protocol self-checks
+        run: |
+          tmpdir="$(mktemp -d)"
+          python3 scripts/codegen.py config/protocol-sample.yaml "$tmpdir"
+          python3 -m pytest -q \
+            test/test_codegen_checksum.py \
+            test/test_public_ci_contract.py

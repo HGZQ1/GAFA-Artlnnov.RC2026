@@ -1,0 +1,32 @@
+# Docker 文件保留（不忽略 docker/ 目录）
+
+# ROS2 编译产物
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+sim_ws/build/
+sim_ws/install/
+sim_ws/log/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 模型权重（体积大，按需选择是否忽略）
+# ros2_ws/src/vision_detector/weights/*.pt
+
+# 临时测试图片
+test*.jpg
+*.png
+
+# Claude 配置（本地专用）
+.claude/
+
+# VSCode 本地配置
+.vscode/
+
+# 截图
+Screenshot*.png
+frames_*.gv
+frames_*.pdf

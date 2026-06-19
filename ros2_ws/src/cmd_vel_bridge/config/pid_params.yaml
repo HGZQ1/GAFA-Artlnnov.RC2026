@@ -1,0 +1,7 @@
+# cmd_vel_bridge 参数
+cmd_vel_bridge:
+  ros__parameters:
+    max_linear_vel: 1.5
+    max_angular_vel: 3.14
+    control_rate: 50.0
+    cmd_vel_timeout: 0.5
