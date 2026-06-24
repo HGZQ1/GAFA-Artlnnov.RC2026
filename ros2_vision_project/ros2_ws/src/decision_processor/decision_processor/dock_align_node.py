@@ -94,12 +94,13 @@ class DockAlignNode(Node):
         self._img_sub         = None
 
         # ── ArUco 检测器 (兼容新旧 API) ───────────────────────
-        aruco_dict   = cv2.aruco.getPredefinedDictionary(self._dict_id)
-        aruco_params = cv2.aruco.DetectorParameters()
+        aruco_dict = cv2.aruco.getPredefinedDictionary(self._dict_id)
         try:
+            aruco_params      = cv2.aruco.DetectorParameters()
             self._detector    = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
             self._use_new_api = True
         except AttributeError:
+            aruco_params         = cv2.aruco.DetectorParameters_create()
             self._detector       = None
             self._aruco_dict_obj = aruco_dict
             self._aruco_params   = aruco_params
@@ -221,6 +222,10 @@ class DockAlignNode(Node):
             self._no_target_count += 1
             self._cmd_pub.publish(Twist())   # 无标志时停车
             if dbg_frame is not None:
+                if not hasattr(self, '_gui_placed'):
+                    cv2.namedWindow('Dock Align', cv2.WINDOW_NORMAL)
+                    cv2.moveWindow('Dock Align', 320, 50)
+                    self._gui_placed = True
                 cv2.putText(dbg_frame, 'SEARCHING...', (10, 40),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
                 cv2.imshow('Dock Align', dbg_frame)
@@ -351,6 +356,10 @@ class DockAlignNode(Node):
         for i, (text, color) in enumerate(lines):
             cv2.putText(frame, text, (10, 35 + i * 32),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.75, color, 2)
+        if not hasattr(self, '_gui_placed'):
+            cv2.namedWindow('Dock Align', cv2.WINDOW_NORMAL)
+            cv2.moveWindow('Dock Align', 320, 50)
+            self._gui_placed = True
         cv2.imshow('Dock Align', frame)
         cv2.waitKey(1)
 

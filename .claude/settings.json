@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /home/hgzq/ros2_external_ws/src)",
+      "Bash(ln -sfn /home/hgzq/livox_ros_driver2 /home/hgzq/ros2_external_ws/src/livox_ros_driver2)",
+      "Bash(cp -f /home/hgzq/livox_ros_driver2/package_ROS2.xml /home/hgzq/livox_ros_driver2/package.xml)",
+      "Bash(cp -rf /home/hgzq/livox_ros_driver2/launch_ROS2/ /home/hgzq/livox_ros_driver2/launch/)",
+      "Read(//dev/**)",
+      "Bash(v4l2-ctl --list-devices)",
+      "Bash(dpkg -l libgtk*)",
+      "Bash(pip uninstall *)",
+      "Bash(python3 -c \"import cv2; print\\(cv2.__version__\\); cv2.namedWindow\\('test'\\); cv2.destroyAllWindows\\(\\); print\\('GUI OK'\\)\")",
+      "Bash(python3 -c \"import cv2; print\\('cv2 path:', cv2.__file__\\); print\\('version:', cv2.__version__\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"import cv2; print\\('cv2:', cv2.__version__\\); d = cv2.aruco.getPredefinedDictionary\\(cv2.aruco.DICT_4X4_50\\); print\\('aruco OK, dict:', d\\); print\\('ArucoDetector:', hasattr\\(cv2.aruco, 'ArucoDetector'\\)\\)\")",
+      "Bash(eog /tmp/aruco_id0_4x4_50.png)",
+      "Bash(ls -lh /tmp/aruco_id0_4x4_50.png 2>&1)",
+      "Read(//tmp/**)",
+      "Bash(DISPLAY=:0 python3 -c ' *)",
+      "Bash(chmod +x /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/launch_rc2026.py)",
+      "Bash(python3 /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/launch_rc2026.py --help)",
+      "Bash(systemctl status *)",
+      "Bash(dpkg -l openssh-server openssh-client)",
+      "Bash(ip addr *)",
+      "Bash(xargs ls -la)",
+      "Bash(colcon build *)",
+      "Bash(grep -v \"^\\\\s*$\")",
+      "Bash(grep -E \"[0-9]+\\\\.?[0-9]*\\\\s*$|=\\\\s*[0-9]\")"
+    ],
+    "additionalDirectories": [
+      "/home/hgzq"
+    ]
+  }
+}

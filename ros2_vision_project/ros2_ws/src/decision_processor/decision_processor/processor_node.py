@@ -26,6 +26,7 @@ from .config import (
     WUGUAN_CLASS_LABELS as WUGUAN_CLASS_ABBR,
     MEILIN_CLASS_LABELS as MEILIN_CLASS_ABBR,
     GRIPPER_STATUS_GRABBED,
+    TARGET_TIMEOUT_S,
 )
 
 MODEL_SCENARIO_MAP = {
@@ -128,7 +129,7 @@ class ProcessorNode(Node):
 
         self._latest_cmd  = Twist()
         self._last_seen_t = time.time()
-        self.TARGET_TIMEOUT = 0.5
+        self.TARGET_TIMEOUT = TARGET_TIMEOUT_S
 
         self.create_timer(0.1, self._timer_cb)
 

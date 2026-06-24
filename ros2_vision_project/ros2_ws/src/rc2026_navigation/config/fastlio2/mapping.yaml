@@ -22,9 +22,9 @@ mapping:
   b_acc_cov: 0.001                   # pb_rm 用 0.001
   b_gyr_cov: 0.001
   fov_degree: 360.0
-  det_range: 100.0                   # pb_rm 用 100m
-  filter_size_surf: 0.5
-  filter_size_map: 0.5
+  det_range: 12.0                   # pb_rm 用 100m
+  filter_size_surf: 0.7
+  filter_size_map: 0.7
   extrinsic_est_en: false
   # Mid-360S → IMU 外参（livox_frame 内 IMU 和 LiDAR 同体，单位为零）
   extrinsic_T: [0.0, 0.0, 0.0]

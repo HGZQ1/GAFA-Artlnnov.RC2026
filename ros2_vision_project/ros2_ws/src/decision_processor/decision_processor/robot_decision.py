@@ -14,6 +14,8 @@ from .config import (
     ARRIVAL_SETTLE_S,
     PICK_DURATION_S,
     ALIGN_THRESHOLD_DEG,
+    ALIGN_TURN_GAIN,
+    FORWARD_SPEED_GAIN,
     WUGUAN_TOTAL_WEAPONS,
 )
 
@@ -127,9 +129,9 @@ class RobotDecision:
             else:
                 # 本帧看到了，用实时角度判断
                 if abs(align_angle) > self.align_thr_deg:
-                    plan = self.planner.plan(base_x, base_y)
-                    cmd['turn_angle']  = plan.turn_deg
-                    cmd['turn_wheels'] = plan.turn_wheels
+                    # 直接使用相机测量的对齐角，避免 planner.plan() 内置的到达检查
+                    # 在近距离时错误返回 turn_deg=0（plan 会因 dist≤arrival_thr 提前返回）
+                    cmd['turn_angle'] = align_angle * ALIGN_TURN_GAIN
                 else:
                     self.state = RobotState.MOVING
                     self.event = 'ALIGNED'
@@ -151,9 +153,9 @@ class RobotDecision:
                     self.state = RobotState.ARRIVED
                     self.event = 'ARRIVED'
                 else:
-                    plan = self.planner.plan(base_x, base_y)
-                    cmd['forward_dist']  = plan.forward_m
-                    cmd['drive_wheels']  = plan.drive_wheels
+                    # 直接用相机深度计算前进速度，绕过 planner 的对齐检查干扰
+                    fwd = max(0.0, distance - self.stop_dist)
+                    cmd['forward_dist'] = fwd * FORWARD_SPEED_GAIN
 
         # ── ARRIVED ──
         elif self.state == RobotState.ARRIVED:

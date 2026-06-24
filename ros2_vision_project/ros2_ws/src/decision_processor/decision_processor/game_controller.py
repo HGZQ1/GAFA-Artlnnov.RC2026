@@ -65,6 +65,7 @@ from .config import (
     FINE_ALIGN_DISABLE, FINE_ALIGN_ENABLE_BLUE, FINE_ALIGN_ENABLE_RED,
     FINE_ALIGN_STATUS_ALIGNING, FINE_ALIGN_STATUS_DONE,
     FINE_ALIGN_TIMEOUT_S,
+    KFS_PLACE_STOP_WAIT_S, KFS_PLACE_CMD_DELAY_S,
 )
 
 
@@ -954,11 +955,11 @@ class GameController(Node):
 
     def _tick_place_kfs(self):
         """到达放置点后, 发送放置 KFS 动作组指令."""
-        if self._phase_elapsed() < 0.3:
+        if self._phase_elapsed() < KFS_PLACE_STOP_WAIT_S:
             self._send_chassis_stop()
             return
         if self._action_status != ACTION_STATUS_DONE:
-            if self._phase_elapsed() < 0.5:
+            if self._phase_elapsed() < KFS_PLACE_CMD_DELAY_S:
                 self._send_action(ACTION_PLACE_KFS)
                 self.get_logger().info('发送放置KFS指令 (抬升40cm + 放置)')
         else:

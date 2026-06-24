@@ -23,7 +23,7 @@ namespace auto_serial_bridge
     pubs->init(this);
     protocol_impl_ = pubs;
 
-    auto_serial_bridge::generated::register_all(this);
+    auto_serial_bridge::generated::register_all(this, pubs.get());
 
     device_config_ = std::make_unique<drivers::serial_driver::SerialPortConfig>(
         baudrate_,

@@ -328,7 +328,25 @@ def generate_launch_description():
     )
 
     # ══════════════════════════════════════
-    #   9. 比赛状态机 (可选)
+    #   9. 精对齐节点 (延迟5s等相机就绪)
+    # ══════════════════════════════════════
+
+    fine_align_node = TimerAction(
+        period=5.0,
+        actions=[Node(
+            package='decision_processor',
+            executable='fine_align_node',
+            name='fine_align_node',
+            output='screen',
+            parameters=[{
+                'cam_index': 0,
+                'debug_gui': False,
+            }],
+        )],
+    )
+
+    # ══════════════════════════════════════
+    #   10. 比赛状态机 (可选)
     # ══════════════════════════════════════
 
     game_controller = Node(
@@ -338,18 +356,18 @@ def generate_launch_description():
         output='screen',
         condition=IfCondition(LaunchConfiguration('use_game_controller')),
         parameters=[{
-            'test_area': LaunchConfiguration('test_area'),
-            'kfs_real':  LaunchConfiguration('kfs_real'),
-            'kfs_fake':  LaunchConfiguration('kfs_fake'),
-            'kfs_color': LaunchConfiguration('kfs_color'),
+            'test_area': ParameterValue(LaunchConfiguration('test_area'), value_type=str),
+            'kfs_real':  ParameterValue(LaunchConfiguration('kfs_real'),  value_type=str),
+            'kfs_fake':  ParameterValue(LaunchConfiguration('kfs_fake'),  value_type=str),
+            'kfs_color': ParameterValue(LaunchConfiguration('kfs_color'), value_type=str),
         }],
     )
 
     return LaunchDescription([
         model_arg, conf_arg, device_arg,
-        use_gc_arg, enable_serial_arg,
         field_side_arg,
         test_area_arg, kfs_real_arg, kfs_fake_arg, kfs_color_arg,
+        use_gc_arg, enable_serial_arg,
         start_x_arg, start_y_arg, start_yaw_arg,
         set_field_side_env,   # 必须在所有节点之前注入环境变量
         # 基础
@@ -376,6 +394,8 @@ def generate_launch_description():
         serial_stack,
         # 合体对齐
         dock_align_node,
+        # 精对齐 (USB相机)
+        fine_align_node,
         # 状态机
         game_controller,
     ])

@@ -65,7 +65,7 @@ class FineAlignNode(Node):
     def __init__(self):
         super().__init__('fine_align_node')
 
-        self.declare_parameter('cam_index', 2)
+        self.declare_parameter('cam_index', 0)
         self.declare_parameter('debug_gui', False)
 
         self._cam_index = self.get_parameter('cam_index').value
@@ -125,12 +125,16 @@ class FineAlignNode(Node):
         )
         os.system(init_cmd)
 
-        # --- 2. 初始化摄像头 ---
-        self._cap = cv2.VideoCapture(idx)
+        # --- 2. 初始化摄像头 (强制 V4L2 后端，避免 GStreamer 管道失败) ---
+        self._cap = cv2.VideoCapture(idx, cv2.CAP_V4L2)
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-        self._cap.set(cv2.CAP_PROP_FPS, 120)
+        self._cap.set(cv2.CAP_PROP_FPS, 30)
+        if not self._cap.isOpened():
+            self.get_logger().error(f'无法打开相机 /dev/video{idx}')
+            self._cap = None
+            return
         self._enabled = True
         self.get_logger().info(f'USB相机已打开: /dev/video{idx}')
 
@@ -175,11 +179,15 @@ class FineAlignNode(Node):
     # ════════════════════════════════════════
 
     def _timer_cb(self):
+        if self._debug_gui:
+            cv2.waitKey(1)   # 始终推动 GTK 事件循环，确保窗口可见
+
         if not self._enabled or self._cap is None:
             return
 
         ret, frame = self._cap.read()
         if not ret:
+            self.get_logger().warn('相机帧读取失败', throttle_duration_sec=2.0)
             return
 
         # --- 4. 图像预处理 ---
@@ -399,6 +407,12 @@ class FineAlignNode(Node):
 
         # --- 9. 调试显示 ---
         if self._debug_gui:
+            if not hasattr(self, '_gui_windows_placed'):
+                cv2.namedWindow('Fine Align', cv2.WINDOW_NORMAL)
+                cv2.namedWindow('Edges', cv2.WINDOW_NORMAL)
+                cv2.moveWindow('Fine Align', 320, 50)
+                cv2.moveWindow('Edges', 320, 520)
+                self._gui_windows_placed = True
             cv2.putText(roi, f"State: {detected_state}", (10, 30), 1, 1.2, (255, 100, 255), 2)
             cv2.putText(roi, f"Avg Err: {int(avg_error)}", (10, 60), 1, 1.2, (0, 255, 255), 2)
             cv2.putText(roi, f"Avg DX: {int(avg_dx)}", (10, 90), 1, 1.2, (255, 0, 255), 2)

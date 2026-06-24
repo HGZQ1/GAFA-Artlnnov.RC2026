@@ -147,7 +147,11 @@ class MapRelocalizer(Node):
             self.destroy_subscription(self._sub)
             self._sub = None
 
-        arr = np.array(self._pts_buf, dtype=np.float32)
+        buf = np.array(self._pts_buf)
+        if buf.dtype.names:
+            arr = np.column_stack([buf['x'], buf['y'], buf['z']]).astype(np.float32)
+        else:
+            arr = buf[:, :3].astype(np.float32)
         scan = o3d.geometry.PointCloud()
         scan.points = o3d.utility.Vector3dVector(arr[:, :3])
         scan = scan.voxel_down_sample(self._voxel)

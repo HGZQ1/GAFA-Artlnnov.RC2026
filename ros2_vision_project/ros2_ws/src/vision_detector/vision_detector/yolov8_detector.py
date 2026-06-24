@@ -66,8 +66,15 @@ class YOLOv8Detector:
         self.model = YOLO(model_path)
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
+
+        import torch
+        if device == 'cuda' and not torch.cuda.is_available():
+            import logging
+            logging.getLogger(__name__).warning(
+                'CUDA requested but not available, falling back to CPU')
+            device = 'cpu'
         self.device = device
-        
+
         # 预热模型
         dummy_img = np.zeros((640, 640, 3), dtype=np.uint8)
         _ = self.model(dummy_img, verbose=False, device=self.device)
