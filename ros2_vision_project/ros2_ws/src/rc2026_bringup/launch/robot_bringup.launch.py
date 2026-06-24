@@ -5,6 +5,7 @@ robot_bringup.launch.py
 替代原 full_system.launch.py，统一管理所有节点启动顺序
 """
 import os
+import yaml
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument, IncludeLaunchDescription,
@@ -53,8 +54,67 @@ def generate_launch_description():
     conf       = LaunchConfiguration('conf')
     device     = LaunchConfiguration('device')
 
+    # ── 从 robot_params.yaml 读取所有硬件安装参数 ──
+    with open(params_file, 'r') as f:
+        hw = yaml.safe_load(f)
+
+    cam     = hw['camera']
+    lid     = hw['lidar']
+    w_arm   = hw['weapon_arm']
+    kfs     = hw['kfs_arm']
+    dep     = kfs['deployed']
+    usb_cam = kfs['usb_camera']
+    suc     = kfs['suction']
+
+    def _a(k, v):
+        return f' {k}:={v}'
+
+    xacro_args = (
+        # D435i 相机
+        _a('camera_x',      cam['offset_x'])  +
+        _a('camera_y',      cam['offset_y'])  +
+        _a('camera_z',      cam['offset_z'])  +
+        _a('camera_roll',   cam['roll'])      +
+        _a('camera_pitch',  cam['pitch'])     +
+        _a('camera_yaw',    cam['yaw'])       +
+        # Livox LiDAR
+        _a('lidar_x',       lid['offset_x'])  +
+        _a('lidar_y',       lid['offset_y'])  +
+        _a('lidar_z',       lid['offset_z'])  +
+        _a('lidar_roll',    lid['roll'])      +
+        _a('lidar_pitch',   lid['pitch'])     +
+        _a('lidar_yaw',     lid['yaw'])       +
+        # 武器头机械臂
+        _a('weapon_arm_x',      w_arm['offset_x'])  +
+        _a('weapon_arm_y',      w_arm['offset_y'])  +
+        _a('weapon_arm_z',      w_arm['offset_z'])  +
+        _a('weapon_arm_roll',   w_arm['roll'])      +
+        _a('weapon_arm_pitch',  w_arm['pitch'])     +
+        _a('weapon_arm_yaw',    w_arm['yaw'])       +
+        # KFS机械臂底座
+        _a('kfs_arm_x',     kfs['offset_x'])  +
+        _a('kfs_arm_y',     kfs['offset_y'])  +
+        _a('kfs_arm_z',     kfs['offset_z'])  +
+        _a('kfs_arm_roll',  kfs['roll'])      +
+        _a('kfs_arm_pitch', kfs['pitch'])     +
+        _a('kfs_arm_yaw',   kfs['yaw'])       +
+        # KFS机械臂展开末端
+        _a('kfs_deployed_x', dep['offset_x'])  +
+        _a('kfs_deployed_y', dep['offset_y'])  +
+        _a('kfs_deployed_z', dep['offset_z'])  +
+        # USB相机
+        _a('usb_cam_x',     usb_cam['offset_x'])  +
+        _a('usb_cam_y',     usb_cam['offset_y'])  +
+        _a('usb_cam_z',     usb_cam['offset_z'])  +
+        _a('usb_cam_pitch', usb_cam['pitch'])     +
+        # 吸盘
+        _a('suction_x', suc['offset_x'])  +
+        _a('suction_y', suc['offset_y'])  +
+        _a('suction_z', suc['offset_z'])
+    )
+
     # ── URDF: robot_state_publisher ──
-    robot_description = Command(['xacro ', urdf_file])
+    robot_description = Command([f'xacro {urdf_file}{xacro_args}'])
 
     robot_state_pub = Node(
         package='robot_state_publisher',

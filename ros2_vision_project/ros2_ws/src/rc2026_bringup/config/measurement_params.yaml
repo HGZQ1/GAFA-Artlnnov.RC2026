@@ -1,7 +1,10 @@
-# base_link → livox_frame 静态TF参数
-# 参考 pb_rm_simulation 的 measurement_params_real.yaml
-# LiDAR 安装在底盘上方，需实际测量后修改
+# ★ 此文件已废弃，LiDAR TF 参数已迁移至 robot_params.yaml → lidar 节 ★
+#
+# 修改 LiDAR 安装位置: 只需修改 robot_params.yaml 中的 lidar.offset_x/y/z
+# robot_bringup.launch.py 会自动读取并注入 URDF xacro 参数
+#
+# 以下保留原始格式供参考（已不生效）:
 
 base_link2livox_frame:
-  xyz: "0.0 0.0 0.55"             # 前方0m, 侧向0m, 高度0.55m (待实测)
-  rpy: "0.0 0.0 0.0"              # 无旋转 (待实测)
+  xyz: "0.0 0.0 0.55"             # → 对应 robot_params.yaml: lidar.offset_z
+  rpy: "0.0 0.0 0.0"              # → 对应 robot_params.yaml: lidar.roll/pitch/yaw

@@ -45,33 +45,77 @@ FIELD_SIDE = _os.environ.get('RC2026_FIELD_SIDE', 'left')
 # ══════════════════════════════════════
 #   TF 坐标系名称定义
 # ══════════════════════════════════════
-FRAME_BASE_LINK   = 'base_link'
-FRAME_CAMERA      = 'camera_link'
-FRAME_ARM_BASE    = 'arm_base_link'
+FRAME_BASE_LINK    = 'base_link'
+FRAME_CAMERA       = 'camera_link'          # D435i 主视觉相机
+FRAME_WEAPON_ARM   = 'weapon_arm_base_link' # 武器头机械臂底座
+FRAME_KFS_ARM      = 'arm_base_link'        # KFS机械臂底座
+FRAME_KFS_DEPLOYED = 'arm_deployed_link'    # KFS机械臂展开末端
+FRAME_USB_CAMERA   = 'usb_camera_link'      # USB精对齐相机（KFS臂末端）
+FRAME_SUCTION      = 'suction_link'         # 吸盘（KFS臂末端）
+FRAME_ARM_BASE     = FRAME_KFS_ARM          # 兼容旧代码 (tf_manager.py)
 
-# ══════════════════════════════════════
-#   相机安装参数
-#   权威来源: rc2026_bringup/config/robot_params.yaml → camera
-# ══════════════════════════════════════
-CAMERA_OFFSET_X   =  0.05
-CAMERA_OFFSET_Y   =  0.0
-CAMERA_OFFSET_Z   =  0.45         # 更新: 相机安装在框架上方
-CAMERA_ROLL_RAD   = 0.0
-CAMERA_PITCH_RAD  = 0.0
-CAMERA_YAW_RAD    = 0.0
+# ══════════════════════════════════════════════════════════════════
+#   ★ 硬件安装参数 ★
+#   权威来源: robot_params.yaml（唯一修改入口）
+#   此处的值由 launch 文件自动注入 URDF xacro，同时供 Python
+#   坐标变换（tf_manager.py fallback）和调试使用
+#   修改后需同步: robot_params.yaml + 此处（两处保持一致）
+# ══════════════════════════════════════════════════════════════════
 
-# ══════════════════════════════════════
-#   机械臂底座安装参数
-# ══════════════════════════════════════
-ARM_OFFSET_X      =  0.0
-ARM_OFFSET_Y      =  0.0
-ARM_OFFSET_Z      =  0.05
-ARM_ROLL_RAD      =  0.0
-ARM_PITCH_RAD     =  0.0
-ARM_YAW_RAD       =  0.0
+# ── D435i 主视觉相机（武器头对齐用）──────────────────────────────
+CAMERA_OFFSET_X   =  0.05    # 相对 base_link 前方偏移 (m)
+CAMERA_OFFSET_Y   =  0.0     # 横向偏移 (m，正=左)
+CAMERA_OFFSET_Z   =  0.45    # 高度 (m，从底盘底面算)
+CAMERA_ROLL_RAD   =  0.0     # 滚转角 (rad)
+CAMERA_PITCH_RAD  =  0.0     # 俯仰角 (rad，朝下为负，如-0.262≈-15°)
+CAMERA_YAW_RAD    =  0.0     # 偏航角 (rad)
 
-# 机械臂相对相机的水平偏移（米，正=相机左侧）
-ARM_LATERAL_FROM_CAMERA = ARM_OFFSET_Y - CAMERA_OFFSET_Y
+# ── 武器头机械臂底座 ──────────────────────────────────────────────
+# ★ 待现场测量后修改，同步更新 robot_params.yaml ★
+WEAPON_ARM_OFFSET_X   =  0.05   # 相对 base_link 偏移 (m)
+WEAPON_ARM_OFFSET_Y   =  0.15
+WEAPON_ARM_OFFSET_Z   =  0.30
+WEAPON_ARM_ROLL_RAD   =  0.0
+WEAPON_ARM_PITCH_RAD  =  0.0
+WEAPON_ARM_YAW_RAD    =  0.0
+
+# ── KFS机械臂底座 ─────────────────────────────────────────────────
+# ★ 待现场测量后修改，同步更新 robot_params.yaml ★
+KFS_ARM_OFFSET_X   =  0.0    # 相对 base_link 偏移 (m)
+KFS_ARM_OFFSET_Y   =  0.0
+KFS_ARM_OFFSET_Z   =  0.05
+KFS_ARM_ROLL_RAD   =  0.0
+KFS_ARM_PITCH_RAD  =  0.0
+KFS_ARM_YAW_RAD    =  0.0
+
+# ── KFS机械臂展开末端位置（相对 arm_base_link）────────────────────
+# ★ 待实测机械臂展开尺寸后修改，同步更新 robot_params.yaml ★
+KFS_DEPLOYED_OFFSET_X =  0.30   # 前伸距离 (m)
+KFS_DEPLOYED_OFFSET_Y =  0.0
+KFS_DEPLOYED_OFFSET_Z =  0.40   # 抬升高度 (m)
+
+# ── USB相机（KFS臂末端，精对齐用，镜头朝下）──────────────────────
+USB_CAMERA_OFFSET_X   =  0.0     # 相对 arm_deployed_link 偏移 (m)
+USB_CAMERA_OFFSET_Y   =  0.0
+USB_CAMERA_OFFSET_Z   =  0.0
+USB_CAMERA_PITCH_RAD  =  1.5708  # π/2 rad，朝下安装
+
+# ── 吸盘（KFS臂末端）────────────────────────────────────────────
+# ★ 待现场测量吸盘相对USB相机的实际偏移后修改 ★
+SUCTION_OFFSET_X   =  0.03   # 相对 arm_deployed_link 偏移 (m)
+SUCTION_OFFSET_Y   =  0.0
+SUCTION_OFFSET_Z   = -0.02   # 负值=低于末端横杆
+
+# ── 兼容别名（tf_manager.py 使用 ARM_OFFSET_*，保留勿删）────────
+ARM_OFFSET_X   = KFS_ARM_OFFSET_X
+ARM_OFFSET_Y   = KFS_ARM_OFFSET_Y
+ARM_OFFSET_Z   = KFS_ARM_OFFSET_Z
+ARM_ROLL_RAD   = KFS_ARM_ROLL_RAD
+ARM_PITCH_RAD  = KFS_ARM_PITCH_RAD
+ARM_YAW_RAD    = KFS_ARM_YAW_RAD
+
+# KFS臂底座相对相机的水平偏移（精对齐横向误差计算用）
+ARM_LATERAL_FROM_CAMERA = KFS_ARM_OFFSET_Y - CAMERA_OFFSET_Y
 
 # ══════════════════════════════════════
 #   底盘物理参数

@@ -105,23 +105,64 @@ lidar:
   pitch: 0.0
   yaw:   0.0
 
-# ── 机械臂安装参数（预留，待组员开发后填入） ──
-arm:
+# ── 武器头机械臂安装参数 ──
+# 功能: 拾取/释放武器端头 (ActionGroupCmd id=1/2)
+# ★ 全部待现场卷尺测量后修改 ★
+weapon_arm:
+  frame_id: "weapon_arm_base_link"
+  offset_x:  0.05                  # 相对 base_link 前方偏移 (米)
+  offset_y:  0.15                  # 相对 base_link 横向偏移 (米, 正=左)
+  offset_z:  0.30                  # 相对 base_link 高度 (米, 从底盘底面算)
+  roll:  0.0                       # 安装滚转角 (弧度)
+  pitch: 0.0                       # 安装俯仰角 (弧度)
+  yaw:   0.0                       # 安装偏航角 (弧度)
+  mass:  0.1                       # 估算质量 (kg, 待确认)
+
+# ── KFS机械臂安装参数 ──
+# 功能: 梅林区拾取KFS (精对齐 + 吸盘抓取)
+# ★ 全部待现场卷尺测量后修改 ★
+kfs_arm:
   frame_id: "arm_base_link"
-  offset_x:  0.0                   # 相对base_link偏移 (米)
-  offset_y:  0.0
-  offset_z:  0.05
+  offset_x:  0.0                   # 相对 base_link 前方偏移 (米)
+  offset_y:  0.0                   # 相对 base_link 横向偏移 (米, 正=左)
+  offset_z:  0.05                  # 相对 base_link 高度 (米)
   roll:  0.0
   pitch: 0.0
   yaw:   0.0
-  # 机械臂通信接口话题
+  mass:  0.1                       # 估算质量 (kg, 待确认)
+
+  # 机械臂完全展开姿态的末端中心位置（相对 arm_base_link, 执行精对齐/拾取时固定姿态）
+  deployed:
+    offset_x: 0.30                 # 前伸距离 (米, ★ 待实测 ★)
+    offset_y: 0.0
+    offset_z: 0.40                 # 抬升高度 (米, ★ 待实测 ★)
+
+  # USB相机（KFS臂末端横杆上, 精对齐用, 镜头朝下）
+  usb_camera:
+    frame_id: "usb_camera_link"
+    offset_x: 0.0                  # 相对 arm_deployed_link 偏移 (米)
+    offset_y: 0.0
+    offset_z: 0.0
+    pitch:    1.5708               # π/2 rad，朝下安装（相机X轴朝向地面）
+    mass:     0.05                 # 估算质量 (kg)
+
+  # 吸盘（KFS臂末端横杆上, 与USB相机存在小偏移）
+  suction:
+    frame_id: "suction_link"
+    offset_x: 0.03                 # 相对 arm_deployed_link 偏移 (米, ★ 待实测 ★)
+    offset_y: 0.0
+    offset_z: -0.02                # 负值=低于末端横杆
+    radius:   0.025                # 吸盘半径 (米)
+    mass:     0.05                 # 估算质量 (kg)
+
+  # KFS机械臂通信接口话题
   topics:
-    target_pos:    "/arm/target_pos"       # PointStamped: 目标位置
-    action_cmd:    "/arm/action_cmd"       # String: 动作指令
-    joint_cmd:     "/serial/arm_joint_cmd" # Float32MultiArray: 关节角度
-    gripper_cmd:   "/serial/arm_gripper_cmd"  # UInt8: 夹爪指令
-    joint_feedback: "/feedback/arm_joints"  # Float32MultiArray: 关节反馈
-    status:        "/arm/status"           # String: 机械臂状态
+    target_pos:     "/arm/target_pos"          # PointStamped: 目标位置
+    action_cmd:     "/arm/action_cmd"          # String: 动作指令
+    joint_cmd:      "/serial/arm_joint_cmd"    # Float32MultiArray: 关节角度
+    gripper_cmd:    "/serial/arm_gripper_cmd"  # UInt8: 夹爪指令
+    joint_feedback: "/feedback/arm_joints"     # Float32MultiArray: 关节反馈
+    status:         "/arm/status"              # String: 机械臂状态
 
 # ── 运动控制参数 ──
 motion:
@@ -184,9 +225,13 @@ odometry:
 
 # ── TF 坐标系定义 ──
 frames:
-  base_link: "base_link"
-  camera: "camera_link"
-  lidar: "lidar_link"
-  arm_base: "arm_base_link"
-  odom: "odom"
-  map: "map"
+  base_link:     "base_link"
+  camera:        "camera_link"
+  lidar:         "lidar_link"
+  weapon_arm:    "weapon_arm_base_link"
+  kfs_arm:       "arm_base_link"   # KFS机械臂底座
+  kfs_deployed:  "arm_deployed_link"  #完全展开末端横杆中心位置
+  usb_camera:    "usb_camera_link"
+  suction:       "suction_link"
+  odom:          "odom"
+  map:           "map"

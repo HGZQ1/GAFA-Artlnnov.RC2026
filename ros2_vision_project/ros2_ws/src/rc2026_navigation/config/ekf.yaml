@@ -28,7 +28,7 @@ ekf_filter_node:
                    false, false, true,     # roll, pitch, yaw
                    true,  true,  false,    # vx, vy, vz
                    false, false, true,     # vroll, vpitch, vyaw
-                   false, false, false]    # ax, ay, az
+                   false, false, false]    # ax, ay, az（加速度，不使用）
     odom0_differential: false
     odom0_relative: false
     odom0_queue_size: 10
@@ -60,7 +60,7 @@ ekf_filter_node:
     imu0_remove_gravitational_acceleration: true
 
     # ── 过程噪声协方差 ──
-    # 对角线: [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+    # 对角线: [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]值越大 = 越不相信模型预测 = 更依赖观测数据：
     process_noise_covariance: [
       0.05,  0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
       0.0,   0.05,  0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
