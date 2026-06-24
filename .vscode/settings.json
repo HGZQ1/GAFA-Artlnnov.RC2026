@@ -1,5 +1,5 @@
 {
-    "cmake.sourceDirectory": "/home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/src/auto_serial_bridge-main",
+    "cmake.sourceDirectory": "/home",
     "python-envs.defaultEnvManager": "ms-python.python:system",
     "python-envs.defaultPackageManager": "ms-python.python:pip",
     "Codegeex.RepoIndex": true
