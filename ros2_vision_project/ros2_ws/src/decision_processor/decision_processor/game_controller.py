@@ -26,6 +26,7 @@ KFS拾取精对齐子流程:
 """
 
 import math
+import os
 import sys
 import time
 import threading
@@ -66,6 +67,7 @@ from .config import (
     FINE_ALIGN_STATUS_ALIGNING, FINE_ALIGN_STATUS_DONE,
     FINE_ALIGN_TIMEOUT_S,
     KFS_PLACE_STOP_WAIT_S, KFS_PLACE_CMD_DELAY_S,
+    WEAPON_GRAB_TIMEOUT_S,
 )
 
 
@@ -175,6 +177,7 @@ class GameController(Node):
             self, NavigateToPose, 'navigate_to_pose',
             callback_group=self._action_cb)
 
+
         # ── Publishers ──
         self._phase_pub      = self.create_publisher(String, '/game/phase', 10)
         self._action_pub     = self.create_publisher(UInt8,  '/serial/action_group_cmd', 10)
@@ -184,6 +187,7 @@ class GameController(Node):
         self._meilin_cmd_pub = self.create_publisher(Twist,  '/serial/meilin_cmd', 10)
         self._fine_align_enable_pub = self.create_publisher(UInt8, '/fine_align/enable', 10)
         self._relocalize_pub = self.create_publisher(String, '/relocalize/trigger', 10)
+        self._model_switch_pub = self.create_publisher(String, '/vision/switch_model', 10)
 
         # ── Subscribers ──
         self.create_subscription(UInt8,  '/feedback/action_group', self._on_action_fb, 10)
@@ -642,6 +646,11 @@ class GameController(Node):
         if self._action_status == ACTION_STATUS_DONE:
             self._reset_nav()
             self._set_phase(GamePhase.NAV_TO_ASSEMBLY)
+        elif self._phase_elapsed() >= WEAPON_GRAB_TIMEOUT_S:
+            self.get_logger().warn(
+                f'抓取武器超时 ({WEAPON_GRAB_TIMEOUT_S}s)，强制跳转至组装点')
+            self._reset_nav()
+            self._set_phase(GamePhase.NAV_TO_ASSEMBLY)
 
     def _tick_wait_assembly(self):
         self._send_lock_chassis_once()
@@ -655,8 +664,34 @@ class GameController(Node):
 
     def _tick_wait_enter_merlin(self):
         if self._r1_signal == R1_SIGNAL_ENTER_MERLIN:
+            # 提前触发模型切换，利用导航到梅林入口的时间并行加载 kfs.pt
+            self._switch_vision_model('kfs.pt')
             self._reset_nav()
             self._set_phase(GamePhase.NAV_TO_MERLIN_ENTRY)
+
+    # ════════════════════════════════════════
+    #   YOLO 模型热切换
+    # ════════════════════════════════════════
+
+    _WEIGHTS_DIR = os.path.join(
+        os.path.expanduser('~'),
+        'GAFA-Artlnnov.RC2026-main', 'ros2_vision_project',
+        'ros2_ws', 'src', 'vision_detector', 'weights',
+    )
+
+    def _switch_vision_model(self, model_name: str):
+        """发布 /vision/switch_model 话题触发模型切换，detector_node 后台加载。"""
+        if not model_name.endswith('.pt'):
+            model_name += '.pt'
+        model_path = os.path.join(self._WEIGHTS_DIR, model_name)
+        if not os.path.exists(model_path):
+            self.get_logger().error(
+                f'[模型切换] 文件不存在: {model_path}')
+            return
+        msg = String()
+        msg.data = model_path
+        self._model_switch_pub.publish(msg)
+        self.get_logger().info(f'[模型切换] 已发布切换请求 → {model_name}')
 
     def _tick_switch_to_merlin(self):
         self._send_chassis_stop()
@@ -691,6 +726,10 @@ class GameController(Node):
     # ── M_INIT: 规划路径 ──
 
     def _m_init(self):
+        # 无论通过何种路径进入梅林（全流程/test_area=merlin），都在此触发模型切换
+        # 全流程下 _tick_wait_enter_merlin 已提前触发，此处是兜底
+        self._switch_vision_model('kfs.pt')
+
         entry = MERLIN_DEFAULT_ENTRY
         path = mpp.plan_path(entry, self._kfs_real_blocks, self._kfs_fake_blocks)
         if not path:
@@ -930,6 +969,7 @@ class GameController(Node):
     def _m_done(self):
         self.get_logger().info(
             f'梅林穿越完成, 已拾取KFS: {self._merlin_picked}')
+        self._switch_vision_model('best.pt')
         self._reset_nav()
         self._set_phase(GamePhase.NAV_TO_MERLIN_EXIT)
 

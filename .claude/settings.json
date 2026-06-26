@@ -25,7 +25,20 @@
       "Bash(xargs ls -la)",
       "Bash(colcon build *)",
       "Bash(grep -v \"^\\\\s*$\")",
-      "Bash(grep -E \"[0-9]+\\\\.?[0-9]*\\\\s*$|=\\\\s*[0-9]\")"
+      "Bash(grep -E \"[0-9]+\\\\.?[0-9]*\\\\s*$|=\\\\s*[0-9]\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/launch_rc2026.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/src/rc2026_bringup/launch/full_system.launch.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/src/decision_processor/decision_processor/game_controller.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/src/decision_processor/decision_processor/game_controller.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/src/decision_processor/decision_processor/game_controller.py'\\).read\\(\\)\\); print\\('gc OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/src/vision_detector/vision_detector/detector_node.py'\\).read\\(\\)\\); print\\('detector OK'\\)\")",
+      "Bash(python3)",
+      "Bash(python3 -c \"import sys; print\\('\\\\n'.join\\(sys.path\\)\\)\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(echo \"copied: $?\")",
+      "Bash(echo \"synced: $?\")",
+      "Bash(chmod +x /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/sync_dp.sh)",
+      "Bash(bash /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/sync_dp.sh)"
     ],
     "additionalDirectories": [
       "/home/hgzq"

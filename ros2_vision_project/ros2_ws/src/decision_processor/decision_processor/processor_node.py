@@ -27,6 +27,8 @@ from .config import (
     MEILIN_CLASS_LABELS as MEILIN_CLASS_ABBR,
     GRIPPER_STATUS_GRABBED,
     TARGET_TIMEOUT_S,
+    STOP_DISTANCE_M,       ALIGN_THRESHOLD_DEG,       CAM_X_OFFSET_M,
+    KFS_STOP_DISTANCE_M,   KFS_ALIGN_THRESHOLD_DEG,   KFS_CAM_X_OFFSET_M,
 )
 
 MODEL_SCENARIO_MAP = {
@@ -44,8 +46,8 @@ class ProcessorNode(Node):
 
         self.declare_parameter('wheel_diameter_m',     0.10781)
         self.declare_parameter('track_width_m',       0.50)
-        self.declare_parameter('stop_distance_m',     0.20)
-        self.declare_parameter('align_threshold_deg', 5.0)
+        self.declare_parameter('stop_distance_m',     STOP_DISTANCE_M)
+        self.declare_parameter('align_threshold_deg', ALIGN_THRESHOLD_DEG)
         self.declare_parameter('pick_duration_s',     10.0)
         self.declare_parameter('conf_threshold',      0.5)
 
@@ -88,7 +90,8 @@ class ProcessorNode(Node):
         self._cur_confidence = 0.0
 
         # game_controller 阶段感知 (None = 无控制器, 向后兼容)
-        self._game_phase = None
+        self._game_phase    = None
+        self._cam_x_offset  = CAM_X_OFFSET_M   # 当前阶段的D435i横向偏移，随阶段切换
 
         self.camera_matrix = np.array([
             [913.461, 0.0, 650.967],
@@ -186,7 +189,19 @@ class ProcessorNode(Node):
             self.decision.pause_at_arrived = True
             self.decision._reset_tracking()
             self.decision.state = RobotState.SEARCHING
-            self.get_logger().info(f'进入视觉对齐模式 ({self._game_phase})')
+            if self._game_phase == 'ALIGN_KFS':
+                self.decision.stop_dist     = KFS_STOP_DISTANCE_M
+                self.decision.align_thr_deg = KFS_ALIGN_THRESHOLD_DEG
+                self._cam_x_offset          = KFS_CAM_X_OFFSET_M
+            else:
+                self.decision.stop_dist     = STOP_DISTANCE_M
+                self.decision.align_thr_deg = ALIGN_THRESHOLD_DEG
+                self._cam_x_offset          = CAM_X_OFFSET_M
+            self.get_logger().info(
+                f'进入视觉对齐模式 ({self._game_phase}) | '
+                f'stop={self.decision.stop_dist:.2f}m '
+                f'thr={self.decision.align_thr_deg:.1f}° '
+                f'x_off={self._cam_x_offset:.3f}m')
 
         if was_servo and not is_servo:
             self.decision.pause_at_arrived = False
@@ -311,7 +326,7 @@ class ProcessorNode(Node):
         # cam_x > 0 = 物体在相机画面右侧 → 机器人需右转 → 角度为负
         # cam_x < 0 = 物体在相机画面左侧 → 机器人需左转 → 角度为正
         # cam_x ≈ 0 = 物体在画面中心     → 已对齐        → 角度≈0
-        align_angle = math.degrees(math.atan2(-cam_x, dist))  #cam_x 是物体相对相机光心的水平偏移
+        align_angle = math.degrees(math.atan2(-(cam_x - self._cam_x_offset), dist))
 
         cmd_dict = self.decision.update(
             detected=True, base_x=rx, base_y=ry,

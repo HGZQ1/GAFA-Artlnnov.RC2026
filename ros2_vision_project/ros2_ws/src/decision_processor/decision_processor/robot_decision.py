@@ -17,6 +17,8 @@ from .config import (
     ALIGN_TURN_GAIN,
     FORWARD_SPEED_GAIN,
     WUGUAN_TOTAL_WEAPONS,
+    CONFIRM_FRAMES,
+    LOST_FRAMES,
 )
 
 
@@ -40,7 +42,7 @@ class RobotDecision:
 
         self.state = RobotState.SEARCHING
 
-        self.confirmation = TargetConfirmation(confirm_frames=3, lost_frames=5)
+        self.confirmation = TargetConfirmation(confirm_frames=CONFIRM_FRAMES, lost_frames=LOST_FRAMES)
         self.kalman       = KalmanFilter2D(dt=0.05)
         self.planner      = MotionPlanner(
             wheel_diameter_m    = wheel_diameter_m,

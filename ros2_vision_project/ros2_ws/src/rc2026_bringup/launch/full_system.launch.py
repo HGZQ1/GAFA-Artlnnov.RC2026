@@ -99,6 +99,9 @@ def generate_launch_description():
     enable_serial_arg = DeclareLaunchArgument(
         'enable_serial', default_value='false',
         description='启动串口通信 (连接 STM32)')
+    debug_gui_arg = DeclareLaunchArgument(
+        'debug_gui', default_value='false',
+        description='调试模式：相机节点显示OpenCV预览窗口')
 
     # start_x/y/yaw 默认值随 field_side + test_area 自动切换为对应
     # 区域入口点的游戏坐标 (full/weapon=WAYPOINT_START, merlin=WAYPOINT_MERLIN_ENTRY,
@@ -322,7 +325,7 @@ def generate_launch_description():
                 'marker_size_m': 0.10,   # ★真机用卷尺测量后修改
                 'marker_ids':    [0],
                 'target_dist_m': 0.30,
-                'debug_gui':     False,
+                'debug_gui':     LaunchConfiguration('debug_gui'),
             }],
         )],
     )
@@ -340,7 +343,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'cam_index': 0,
-                'debug_gui': False,
+                'debug_gui': LaunchConfiguration('debug_gui'),
             }],
         )],
     )
@@ -367,7 +370,7 @@ def generate_launch_description():
         model_arg, conf_arg, device_arg,
         field_side_arg,
         test_area_arg, kfs_real_arg, kfs_fake_arg, kfs_color_arg,
-        use_gc_arg, enable_serial_arg,
+        use_gc_arg, enable_serial_arg, debug_gui_arg,
         start_x_arg, start_y_arg, start_yaw_arg,
         set_field_side_env,   # 必须在所有节点之前注入环境变量
         # 基础

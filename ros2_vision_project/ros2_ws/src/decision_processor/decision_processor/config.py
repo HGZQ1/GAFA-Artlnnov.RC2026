@@ -22,13 +22,21 @@ import os as _os
 #     CAMERA_OFFSET_*      — 相机相对 base_link 的安装位置 (m)
 #     CAMERA_PITCH_RAD     — 相机俯仰角 (正=朝上, 负=朝下)
 # ╚══════════════════════════════════════════════════════════════════╝
-ALIGN_THRESHOLD_DEG  = 5.0     # 对齐角度容差 (度)
-ALIGN_TURN_GAIN      = 1.0     # 转向速度增益 (1.0=直接用偏角, 0.5=减半)
-STOP_DISTANCE_M      = 0.50    # 武馆停止距离 (m, 相机到武器)
+# ── 武器头对齐参数 (ALIGN_WEAPON 阶段, D435i + best.pt/wuqi.pt) ──────
+ALIGN_THRESHOLD_DEG  = 5.0     # 对齐完成角度容差 (度)，越小越精准但越难到达
+STOP_DISTANCE_M      = 0.20    # 前进停止距离 (m, D435i到武器头)
+CAM_X_OFFSET_M       = 0.0     # D435i画面横向偏移补偿 (m)，正=目标偏画面右时算对齐，负=偏左
+
+# ── KFS粗对齐参数 (ALIGN_KFS 阶段, D435i + kfs.pt) ──────────────────
+KFS_ALIGN_THRESHOLD_DEG = 5.0  # 对齐完成角度容差 (度)
+KFS_STOP_DISTANCE_M     = 0.50 # 前进停止距离 (m, D435i到KFS方块)
+KFS_CAM_X_OFFSET_M      = 0.0  # D435i画面横向偏移补偿 (m)，正=目标偏画面右时算对齐，负=偏左
+
+ALIGN_TURN_GAIN      = 1.0     # 转向速度增益 (1.0=直接用偏角, 0.5=减半)，武器头/KFS共用
 FORWARD_SPEED_GAIN   = 1.0     # 前进速度增益
 WUGUAN_CONF_MIN      = 0.70    # 武馆 YOLO 置信度最低阈值
 WUGUAN_TOTAL_WEAPONS = 999     # 武馆拾取总数 (999=不限, 比赛改3)
-CONFIRM_FRAMES       = 3       # 连续N帧确认目标锁定
+CONFIRM_FRAMES       = 3       # 连续N帧确认目标锁定（越大越稳但越慢响应）
 TARGET_TIMEOUT_S     = 0.5     # 目标消失超过此时间视为丢失 (s)
 
 # ══════════════════════════════════════
@@ -204,6 +212,7 @@ BLOCK_HEIGHTS_MM = {
     7:  400,  8:  600,  9:  400,
     10: 200,  11: 400,  12: 200,
 }
+BLOCK_HEIGHTS = BLOCK_HEIGHTS_MM   # 兼容别名 (game_controller.py 使用)
 
 # 方块网格位置 (row, col)  row 0=入口侧  col 0=左侧
 BLOCK_GRID = {
@@ -289,6 +298,7 @@ FINE_ALIGN_MAX_SPEED_MPS = 0.05
 
 # 精对齐"已居中"需连续确认的帧数 (防抖, 避免单帧抖动提前结束)
 FINE_ALIGN_CONFIRM_FRAMES = 5
+
 
 BLOCK_TOP_SIZE     = 0.355
 KFS_SIZE           = 0.350
@@ -434,6 +444,9 @@ MERLIN_PICKUP_WAIT_S = 5.0     # 梅林内拾取KFS后等待确认的最长时�
 # ── 视觉对齐超时 ─────────────────────────────────────────────────
 FINE_ALIGN_TIMEOUT_S   = 15.0  # 精对齐（USB相机）超时兜底，超时则放弃精对齐直接进拾取 (s)
 DOCK_ALIGN_TIMEOUT_S   = 30.0  # 合体对齐（ArUco深度相机）超时兜底 (s)
+
+# ── 动作组超时保护 ───────────────────────────────────────────────
+WEAPON_GRAB_TIMEOUT_S = 10.0   # 抓取武器端头动作组超时（超时强制跳下一阶段）(s)
 
 # ── KFS放置控制（game_controller._tick_place_kfs）──────────────
 KFS_PLACE_STOP_WAIT_S = 0.3    # 到达KFS放置点后底盘停止稳定等待时间，避免平台晃动 (s)

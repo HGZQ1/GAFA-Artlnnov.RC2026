@@ -7,10 +7,10 @@
 # ── 底盘几何参数（单位：米，来自机械组 Blender 模型） ──
 chassis:
   type: "omni4"                    # 底盘类型: omni4(四轮万向轮) / mecanum / diff
-  frame_width: 0.80003             # 内框宽度 (X方向, mm→m)
-  frame_depth: 0.70025             # 内框深度 (Y方向, mm→m)
-  frame_diagonal: 0.88584          # 外框对角线尺寸
-  frame_height: 0.50798            # 框架高度（不含轮子）
+  frame_width: 0.69000             # 内框宽度 (X方向, mm→m)
+  frame_depth: 0.77725             # 内框深度 (Y方向, mm→m)
+  frame_diagonal: 0.67700          # 外框对角线尺寸
+  frame_height: 0.67500            # 框架高度（不含轮子）
   frame_shape: "octagon"           # 框架形状: octagon(八边形)
 
   # 轮子参数

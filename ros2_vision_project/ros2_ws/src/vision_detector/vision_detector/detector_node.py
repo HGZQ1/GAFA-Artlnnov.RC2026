@@ -112,6 +112,11 @@ class VisionDetectorNode(Node):
         self.model_pub = self.create_publisher(
             String, '/vision/current_model', 10)
 
+        # 话题式模型切换（game_controller 发布 /vision/switch_model）
+        # 比 SetParameters 服务更可靠：无需服务就绪检查，不阻塞 executor
+        self.create_subscription(
+            String, '/vision/switch_model', self._on_switch_model_topic, 10)
+
         if self.publish_vis:
             self.vis_pub = self.create_publisher(
                 Image, '/detection_image', 10)
@@ -170,12 +175,26 @@ class VisionDetectorNode(Node):
     #   参数变更回调（model_switcher 触发）
     # ──────────────────────────────────────────────────────
 
+    def _on_switch_model_topic(self, msg: String):
+        """话题式模型切换回调，在独立线程中加载模型，不阻塞 spin。"""
+        import threading
+        model_name = msg.data.strip()
+        if not model_name:
+            return
+        self.get_logger().info(f'[话题切换] 收到模型切换请求: {model_name}')
+        threading.Thread(
+            target=self._switch_model, args=(model_name,), daemon=True
+        ).start()
+
     def _on_param_change(self, params):
         for param in params:
             if param.name == 'model_path' and param.value:
                 self.get_logger().info(
                     f'收到模型切换请求：{param.value}')
-                self._switch_model(param.value)
+                import threading
+                threading.Thread(
+                    target=self._switch_model, args=(param.value,), daemon=True
+                ).start()
         return SetParametersResult(successful=True)
 
     def _switch_model(self, new_model_path: str):
