@@ -83,8 +83,8 @@ chassis:
 # ── 相机安装参数（Intel RealSense D435i） ──
 camera:
   frame_id: "camera_link"
-  offset_x:  0.05                  # 相对base_link前方偏移 (米)
-  offset_y:  0.0                   # 横向偏移 (米, 正=左)
+  offset_x:  0.35                  # 相对base_link前方偏移 (米)
+  offset_y:  0.30                   # 横向偏移 (米, 正=左)
   offset_z:  0.45                  # 高度偏移 (米, 从底盘底面算)
   roll:  0.0                       # 安装滚转角 (弧度)
   pitch: 0.0                       # 安装俯仰角 (弧度)
@@ -98,7 +98,7 @@ camera:
 # ── 激光雷达安装参数（Livox Mid-360S） ──
 lidar:
   frame_id: "lidar_link"
-  offset_x:  0.0                   # 相对base_link偏移 (米)
+  offset_x:  -0.35                   # 相对base_link偏移 (米)
   offset_y:  0.0
   offset_z:  0.55                  # 安装在框架顶部（待确认）
   roll:  0.0
@@ -110,8 +110,8 @@ lidar:
 # ★ 全部待现场卷尺测量后修改 ★
 weapon_arm:
   frame_id: "weapon_arm_base_link"
-  offset_x:  0.05                  # 相对 base_link 前方偏移 (米)
-  offset_y:  0.15                  # 相对 base_link 横向偏移 (米, 正=左)
+  offset_x:  0.40                  # 相对 base_link 前方偏移 (米)
+  offset_y:  0.30                  # 相对 base_link 横向偏移 (米, 正=左)
   offset_z:  0.30                  # 相对 base_link 高度 (米, 从底盘底面算)
   roll:  0.0                       # 安装滚转角 (弧度)
   pitch: 0.0                       # 安装俯仰角 (弧度)

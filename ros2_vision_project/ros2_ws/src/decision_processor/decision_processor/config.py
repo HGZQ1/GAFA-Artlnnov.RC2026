@@ -35,7 +35,7 @@ KFS_CAM_X_OFFSET_M      = 0.0  # D435i画面横向偏移补偿 (m)，正=目标�
 ALIGN_TURN_GAIN      = 1.0     # 转向速度增益 (1.0=直接用偏角, 0.5=减半)，武器头/KFS共用
 FORWARD_SPEED_GAIN   = 1.0     # 前进速度增益
 WUGUAN_CONF_MIN      = 0.70    # 武馆 YOLO 置信度最低阈值
-WUGUAN_TOTAL_WEAPONS = 999     # 武馆拾取总数 (999=不限, 比赛改3)
+WUGUAN_TOTAL_WEAPONS = 1     # 武馆拾取总数 (999=不限, 比赛改3)
 CONFIRM_FRAMES       = 3       # 连续N帧确认目标锁定（越大越稳但越慢响应）
 TARGET_TIMEOUT_S     = 0.5     # 目标消失超过此时间视为丢失 (s)
 
@@ -142,7 +142,7 @@ ARRIVAL_THRESHOLD_M = 0.55    # planner 内部到达判定距离 (m)
 # ══════════════════════════════════════
 #   决策参数
 # ══════════════════════════════════════
-PICK_DURATION_S     = 10.0    # 拾取动作最长等待时间 (s)
+PICK_DURATION_S     = 15.0    # 拾取动作最长等待时间 (s)
 ARRIVAL_SETTLE_S    = 1.0     # 到达后稳定等待时间 (s)
 LOST_FRAMES         = 5       # 连续N帧未检测到视为目标丢失
 MAX_JUMP_M          = 0.8     # 检测跳变过滤阈值 (m)
@@ -438,15 +438,15 @@ MATCH_TIMEOUT_S      = 250.0   # 超过此时间后强制停机兜底 (4分10秒
 PHASE_SWITCH_WAIT_S  = 1.0     # 阶段切换后稳定等待时间，避免连续跳阶段 (s)
 
 # ── 梅林区域等待时间 ─────────────────────────────────────────────
-MERLIN_CLIMB_WAIT_S  = 3.0     # 发送爬升指令后等待下位机动作完成的最长时间 (s)
-MERLIN_PICKUP_WAIT_S = 5.0     # 梅林内拾取KFS后等待确认的最长时间 (s)
+MERLIN_CLIMB_WAIT_S  = 20.0     # 发送爬升指令后等待下位机动作完成的最长时间 (s)
+MERLIN_PICKUP_WAIT_S = 10.0     # 梅林内拾取KFS后等待确认的最长时间 (s)
 
 # ── 视觉对齐超时 ─────────────────────────────────────────────────
 FINE_ALIGN_TIMEOUT_S   = 15.0  # 精对齐（USB相机）超时兜底，超时则放弃精对齐直接进拾取 (s)
 DOCK_ALIGN_TIMEOUT_S   = 30.0  # 合体对齐（ArUco深度相机）超时兜底 (s)
 
 # ── 动作组超时保护 ───────────────────────────────────────────────
-WEAPON_GRAB_TIMEOUT_S = 10.0   # 抓取武器端头动作组超时（超时强制跳下一阶段）(s)
+WEAPON_GRAB_TIMEOUT_S = 15.0   # 抓取武器端头动作组超时（超时强制跳下一阶段）(s)
 
 # ── KFS放置控制（game_controller._tick_place_kfs）──────────────
 KFS_PLACE_STOP_WAIT_S = 0.3    # 到达KFS放置点后底盘停止稳定等待时间，避免平台晃动 (s)
