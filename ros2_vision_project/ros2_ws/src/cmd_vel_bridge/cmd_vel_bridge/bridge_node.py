@@ -1,6 +1,6 @@
 """
 bridge_node.py
-多源速度指令汇聚 + 优先级仲裁 + 限速 + rad/s→deg转换 → /serial/chassis_cmd
+多源速度指令汇聚 + 优先级仲裁 + 单位转换 → /serial/chassis_cmd
 
 优先级 (高→低):
   1. /fine_align/cmd  — USB相机精对齐 (角速度 rad/s)
@@ -8,7 +8,13 @@ bridge_node.py
   3. /cmd_vel         — 路点导航 (角速度 rad/s)
 
 超时: 某源超过 cmd_vel_timeout 秒没发新消息则视为不活跃, 降级到下一优先级.
-STM32 期望: [vx m/s, vy m/s, rotation deg/cycle]  (正=逆时针 负=顺时针)
+/cmd_vel 输入:
+  linear.x/y = m/s
+  angular.z  = rad/s
+
+/serial/chassis_cmd 输出:
+  linear.x/y = m/s
+  angular.z  = deg/s
 """
 import math
 import time
@@ -95,12 +101,10 @@ class CmdVelBridge(Node):
 
         self._need_stop = True   # 本次有命令，下次切空时发一次停车包
 
-        rotation_deg = omega * self._dt * (180.0 / math.pi)
-
         cmd = Twist()
-        cmd.linear.x  = vx
-        cmd.linear.y  = vy
-        cmd.angular.z = rotation_deg
+        cmd.linear.x = vx
+        cmd.linear.y = vy
+        cmd.angular.z = omega * (180.0 / math.pi)
         self.chassis_pub.publish(cmd)
 
 

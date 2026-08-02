@@ -16,6 +16,8 @@ from .config import (
     ALIGN_THRESHOLD_DEG,
     ALIGN_TURN_GAIN,
     FORWARD_SPEED_GAIN,
+    WEAPON_APPROACH_MAX_SPEED_MPS,
+    WEAPON_SERVO_LEVEL_WAIT_S,
     WUGUAN_TOTAL_WEAPONS,
     CONFIRM_FRAMES,
     LOST_FRAMES,
@@ -28,6 +30,7 @@ class RobotState(Enum):
     MOVING    = auto()
     ARRIVED   = auto()
     PICKING   = auto()
+    SERVO_WAIT = auto()
 
 
 class RobotDecision:
@@ -57,22 +60,32 @@ class RobotDecision:
         self.align_thr_deg = align_threshold_deg
         self.pick_duration = pick_duration_s
         self.settle_time   = ARRIVAL_SETTLE_S
+        self.weapon_approach_max_speed = WEAPON_APPROACH_MAX_SPEED_MPS
 
         self._last_pos       = None
         self._arrival_start  = 0.0
         self._pick_start     = 0.0
+        self._approach_remaining_m = 0.0
+        self._approach_last_t = 0.0
+        self._approach_last_speed = 0.0
 
         self.pick_count      = 0
         self.all_picked      = False
         self._all_done_fired = False
 
         self.pause_at_arrived = False
+        self.enable_weapon_servo = False
 
         self.align_angle_deg = 0.0
         self.target_distance = 0.0
         self.arm_target_dist = 0.0
         self.pick_elapsed    = 0.0
         self.settle_remain   = 0.0
+        self.servo_wait_remain = 0.0
+        self.forward_speed_cmd = 0.0
+        self.weapon_speed_limited = False
+
+        self._servo_wait_start = 0.0
 
         # 下位机夹爪反馈：收到"已抓取"后可提前结束PICKING计时
         self._pick_feedback_done = False
@@ -98,6 +111,8 @@ class RobotDecision:
         now = time.time()
         cmd = self._stop_cmd()
         self.event = ''
+        self.forward_speed_cmd = 0.0
+        self.weapon_speed_limited = False
 
         confirmed = self.confirmation.update(detected)
 
@@ -131,16 +146,51 @@ class RobotDecision:
             else:
                 # 本帧看到了，用实时角度判断
                 if abs(align_angle) > self.align_thr_deg:
-                    # 直接使用相机测量的对齐角，避免 planner.plan() 内置的到达检查
+                    # 将相机测量的对齐角按比例作为角速度命令(deg/s)，避免
+                    # planner.plan() 内置的到达检查
                     # 在近距离时错误返回 turn_deg=0（plan 会因 dist≤arrival_thr 提前返回）
                     cmd['turn_angle'] = align_angle * ALIGN_TURN_GAIN
                 else:
-                    self.state = RobotState.MOVING
-                    self.event = 'ALIGNED'
+                    if self.enable_weapon_servo:
+                        self._start_weapon_approach(now, distance)
+                        self._servo_wait_start = now
+                        self.servo_wait_remain = WEAPON_SERVO_LEVEL_WAIT_S
+                        self.state = RobotState.SERVO_WAIT
+                        self.event = 'WEAPON_SERVO_LEVEL'
+                    else:
+                        self._start_weapon_approach(now, distance)
+                        self.state = RobotState.MOVING
+                        self.event = 'ALIGNED'
+
+        # ── SERVO_WAIT ──
+        elif self.state == RobotState.SERVO_WAIT:
+            elapsed = now - self._servo_wait_start
+            self.servo_wait_remain = max(0.0, WEAPON_SERVO_LEVEL_WAIT_S - elapsed)
+            if elapsed >= WEAPON_SERVO_LEVEL_WAIT_S:
+                self._approach_last_t = now
+                self._approach_last_speed = 0.0
+                self.state = RobotState.MOVING
+                self.event = 'ALIGNED'
 
         # ── MOVING ──
         elif self.state == RobotState.MOVING:
-            if not confirmed:
+            if self.enable_weapon_servo:
+                self._update_weapon_approach(now, detected, distance)
+                if self._approach_remaining_m <= 0.01:
+                    self._arrival_start = now
+                    self._approach_last_speed = 0.0
+                    self.state = RobotState.ARRIVED
+                    self.event = 'ARRIVED'
+                else:
+                    speed = self._approach_remaining_m * FORWARD_SPEED_GAIN
+                    if (self.weapon_approach_max_speed > 0.0
+                            and speed > self.weapon_approach_max_speed):
+                        speed = self.weapon_approach_max_speed
+                        self.weapon_speed_limited = True
+                    self.forward_speed_cmd = speed
+                    self._approach_last_speed = speed
+                    cmd['forward_dist'] = speed
+            elif not confirmed:
                 self._reset_tracking()
                 self.state = RobotState.SEARCHING
                 self.event = 'TARGET_LOST'
@@ -157,7 +207,14 @@ class RobotDecision:
                 else:
                     # 直接用相机深度计算前进速度，绕过 planner 的对齐检查干扰
                     fwd = max(0.0, distance - self.stop_dist)
-                    cmd['forward_dist'] = fwd * FORWARD_SPEED_GAIN
+                    speed = fwd * FORWARD_SPEED_GAIN
+                    if (self.enable_weapon_servo
+                            and self.weapon_approach_max_speed > 0.0
+                            and speed > self.weapon_approach_max_speed):
+                        speed = self.weapon_approach_max_speed
+                        self.weapon_speed_limited = True
+                    self.forward_speed_cmd = speed
+                    cmd['forward_dist'] = speed
 
         # ── ARRIVED ──
         elif self.state == RobotState.ARRIVED:
@@ -205,6 +262,37 @@ class RobotDecision:
         self.kalman.reset()
         self.confirmation.reset()
         self._last_pos = None
+        self._reset_weapon_approach()
+
+    def _start_weapon_approach(self, now: float, distance: float):
+        """Lock the forward-only weapon approach distance after ALIGNING."""
+        self._approach_remaining_m = max(0.0, distance - self.stop_dist)
+        self._approach_last_t = now
+        self._approach_last_speed = 0.0
+
+    def _update_weapon_approach(self, now: float, detected: bool, distance: float):
+        if self._approach_last_t <= 0.0:
+            seed_distance = distance if distance > 0.0 else self.target_distance
+            self._start_weapon_approach(now, seed_distance)
+
+        dt = max(0.0, now - self._approach_last_t)
+        self._approach_last_t = now
+        self._approach_remaining_m = max(
+            0.0,
+            self._approach_remaining_m - self._approach_last_speed * dt)
+
+        if detected and distance > 0.0:
+            live_remaining = max(0.0, distance - self.stop_dist)
+            self._approach_remaining_m = min(
+                self._approach_remaining_m,
+                live_remaining)
+
+        self.target_distance = self.stop_dist + self._approach_remaining_m
+
+    def _reset_weapon_approach(self):
+        self._approach_remaining_m = 0.0
+        self._approach_last_t = 0.0
+        self._approach_last_speed = 0.0
 
     def reset_all(self):
         self._reset_tracking()
@@ -212,6 +300,10 @@ class RobotDecision:
         self.pick_count = 0
         self.all_picked = False
         self._all_done_fired = False
+        self.servo_wait_remain = 0.0
+        self._servo_wait_start = 0.0
+        self.forward_speed_cmd = 0.0
+        self.weapon_speed_limited = False
 
     @property
     def state_name(self) -> str:

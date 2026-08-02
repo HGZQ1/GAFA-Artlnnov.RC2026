@@ -13,34 +13,34 @@
        ============================================================ -->
 
   <!-- ══════════ 底盘几何参数 ══════════ -->
-  <xacro:arg name="chassis_width"   default="0.80003"/>
-  <xacro:arg name="chassis_depth"   default="0.70025"/>
-  <xacro:arg name="chassis_height"  default="0.50798"/>
-  <xacro:arg name="wheel_radius"    default="0.053905"/>
-  <xacro:arg name="wheel_width"     default="0.045"/>
-  <xacro:arg name="wheel_base_x"    default="0.27"/>
-  <xacro:arg name="wheel_base_y"    default="0.25"/>
+  <xacro:arg name="chassis_width"   default="0.56000"/>
+  <xacro:arg name="chassis_depth"   default="0.68000"/>
+  <xacro:arg name="chassis_height"  default="0.67700"/>
+  <xacro:arg name="wheel_radius"    default="0.07625"/>
+  <xacro:arg name="wheel_width"     default="0.0412"/>
+  <xacro:arg name="wheel_base_x"    default="0.20"/>
+  <xacro:arg name="wheel_base_y"    default="0.213"/>
 
   <!-- ══════════ D435i 相机安装参数 ══════════ -->
-  <xacro:arg name="camera_x"     default="0.05"/>
-  <xacro:arg name="camera_y"     default="0.0"/>
-  <xacro:arg name="camera_z"     default="0.45"/>
+  <xacro:arg name="camera_x"     default="0.28"/>
+  <xacro:arg name="camera_y"     default="-0.316"/>
+  <xacro:arg name="camera_z"     default="0.445"/>
   <xacro:arg name="camera_roll"  default="0.0"/>
   <xacro:arg name="camera_pitch" default="0.0"/>
   <xacro:arg name="camera_yaw"   default="0.0"/>
 
   <!-- ══════════ Livox Mid-360S 激光雷达安装参数 ══════════ -->
-  <xacro:arg name="lidar_x"     default="0.0"/>
-  <xacro:arg name="lidar_y"     default="0.0"/>
-  <xacro:arg name="lidar_z"     default="0.55"/>
+  <xacro:arg name="lidar_x"     default="0.197"/>
+  <xacro:arg name="lidar_y"     default="0.27"/>
+  <xacro:arg name="lidar_z"     default="0.565"/>
   <xacro:arg name="lidar_roll"  default="0.0"/>
-  <xacro:arg name="lidar_pitch" default="0.0"/>
+  <xacro:arg name="lidar_pitch" default="0.5236"/>
   <xacro:arg name="lidar_yaw"   default="0.0"/>
 
   <!-- ══════════ 武器头机械臂安装参数 ══════════ -->
-  <xacro:arg name="weapon_arm_x"     default="0.05"/>
-  <xacro:arg name="weapon_arm_y"     default="0.15"/>
-  <xacro:arg name="weapon_arm_z"     default="0.30"/>
+  <xacro:arg name="weapon_arm_x"     default="0.51"/>
+  <xacro:arg name="weapon_arm_y"     default="-0.316"/>
+  <xacro:arg name="weapon_arm_z"     default="0.41"/>
   <xacro:arg name="weapon_arm_roll"  default="0.0"/>
   <xacro:arg name="weapon_arm_pitch" default="0.0"/>
   <xacro:arg name="weapon_arm_yaw"   default="0.0"/>

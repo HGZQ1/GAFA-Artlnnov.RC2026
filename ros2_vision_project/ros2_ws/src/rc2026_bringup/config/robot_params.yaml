@@ -16,9 +16,9 @@ chassis:
   # 轮子参数
   wheel:
     type: "omni"                   # 轮子类型: omni(万向轮) / mecanum / standard
-    diameter: 0.10781              # 轮子直径 (107.81mm)
-    radius: 0.053905               # 轮子半径
-    width: 0.045                   # 轮子宽度（待机械组确认）
+    diameter: 0.1525              # 轮子直径 (107.81mm)
+    radius: 0.07625               # 轮子半径
+    width: 0.0412                   # 轮子宽度（待机械组确认）
     count: 4                       # 驱动轮数量
 
   # 轮子安装位置（相对底盘中心, 单位：米）
@@ -27,25 +27,25 @@ chassis:
   # wheel_angle: 每个轮子的滚动方向角度（度）
   wheel_positions:
     front_left:
-      x:  0.27                     # 待机械组确认精确值
-      y:  0.25
-      angle: 45.0                  # 滚动方向角度
+      x:  0.164                     # 待机械组确认精确值
+      y:  0.222
+      angle: 43.76                  # 滚动方向角度
     front_right:
-      x:  0.27
-      y: -0.25
-      angle: -45.0
+      x:  0.16
+      y: -0.23
+      angle: -44.84
     rear_left:
-      x: -0.27
-      y:  0.25
-      angle: -45.0
+      x: -0.163
+      y:  0.243
+      angle: -45.5673
     rear_right:
-      x: -0.27
-      y: -0.25
-      angle: 45.0
+      x: -0.16
+      y: -0.225
+      angle: 45.5673
 
   # 轮距和轴距（用于简化运动学计算）
-  wheel_base_x: 0.54               # 前后轮中心距 (2 * 0.27)
-  wheel_base_y: 0.50               # 左右轮中心距 (2 * 0.25)
+  wheel_base_x: 0.46               # 前后轮中心距 (2 * 0.27)
+  wheel_base_y: 0.3235               # 左右轮中心距 (2 * 0.25)
   wheel_separation_half: 0.375     # (wheel_base_x/2 + wheel_base_y/2)
 
   # 底盘质量与惯性（待机械组提供精确值）
@@ -182,10 +182,10 @@ decision:
 # ── PID 控制参数 ──
 pid:
   linear:
-    kp: 0.8
-    ki: 0.3
-    kd: 0.02
-    max_output: 1.5                # = chassis.max_linear_vel
+    kp: 0.1                        #D1：0.8太大导致振荡严重（1m左右振荡），故减半为0.4
+    ki: 0.0
+    kd: 0.0
+    max_output: 1.0                # = chassis.max_linear_vel  （最大速度输出）
     deadband: 0.01
   angular:
     kp: 1.5

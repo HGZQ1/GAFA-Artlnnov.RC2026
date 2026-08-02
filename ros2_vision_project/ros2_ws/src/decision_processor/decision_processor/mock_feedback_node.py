@@ -32,7 +32,8 @@ from nav2_msgs.action import NavigateToPose
 
 from .config import (
     ACTION_PICKUP_WEAPON, ACTION_RELEASE_WEAPON, ACTION_PICKUP_KFS,
-    ACTION_LOCK_CHASSIS, ACTION_ARM_LIFT_1, ACTION_ARM_LIFT_2,
+    ACTION_PLACE_KFS, ACTION_LOCK_CHASSIS, ACTION_ARM_LIFT_1, ACTION_ARM_LIFT_2,
+    ACTION_MERGE,
     ACTION_STATUS_DONE,
     ASSEMBLY_STATUS_DONE,
     R1_SIGNAL_ENTER_MERLIN,
@@ -233,9 +234,11 @@ class MockFeedbackNode(Node):
         ACTION_PICKUP_WEAPON:  '拾取武器端头',
         ACTION_RELEASE_WEAPON: '释放武器端头',
         ACTION_PICKUP_KFS:     '拾取KFS',
+        ACTION_PLACE_KFS:      '放置KFS',
         ACTION_LOCK_CHASSIS:   '底盘锁死',
         ACTION_ARM_LIFT_1:     '机械臂抬升1',
         ACTION_ARM_LIFT_2:     '机械臂抬升2',
+        ACTION_MERGE:          '合体动作组',
     }
 
     def _on_action_cmd(self, msg):
@@ -317,6 +320,7 @@ class MockFeedbackNode(Node):
     #   /serial/meilin_cmd (Twist):
     #     linear.x  = next_block (目标台阶编号)
     #     linear.y  = climb_mode (1=爬升, 2=爬升, 3=下降, 4=下降)
+    #     angular.x = height_diff_mm (相邻台阶高度差, mm)
     #
     #   BLOCK_CENTERS 为 game 坐标, 转换为 Gazebo:
     #     gz_x = origin_y - game_y
@@ -327,10 +331,12 @@ class MockFeedbackNode(Node):
     def _on_meilin_cmd(self, msg: Twist):
         next_block = int(msg.linear.x)
         climb_mode = int(msg.linear.y)
+        height_diff_mm = float(msg.angular.x)
         if next_block <= 0 or climb_mode == 0:
             return
 
-        height = BLOCK_HEIGHTS.get(next_block, 0.0)
+        height_mm = BLOCK_HEIGHTS.get(next_block, 0.0)
+        height_m = height_mm / 1000.0
         center = BLOCK_CENTERS.get(next_block)
         if center is None:
             self.get_logger().warn(f'未知台阶编号: {next_block}')
@@ -342,9 +348,10 @@ class MockFeedbackNode(Node):
 
         self.get_logger().info(
             f'梅林瞬移: 台阶{next_block} game({game_x:.1f},{game_y:.1f}) → '
-            f'Gazebo({gz_x:.2f}, {gz_y:.2f}, z={height:.2f}m)')
+            f'Gazebo({gz_x:.2f}, {gz_y:.2f}, z={height_m:.2f}m), '
+            f'cmd={climb_mode}, height_diff={height_diff_mm:+.0f}mm')
 
-        self._teleport_robot(gz_x, gz_y, height)
+        self._teleport_robot(gz_x, gz_y, height_m)
 
     def _teleport_robot(self, gz_x, gz_y, gz_z):
         if self._gz_client is None or not _HAS_GAZEBO_MSGS:

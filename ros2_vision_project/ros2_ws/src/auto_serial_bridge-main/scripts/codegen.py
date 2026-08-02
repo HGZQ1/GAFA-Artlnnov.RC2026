@@ -640,16 +640,17 @@ def generate_ros_bindings(messages, type_mappings, config, output_path):
                         fmt_parts.append(f"{field_name}=%d")
                         arg_parts.append(f"static_cast<int>(pkt->{field_name})")
 
-                if fmt_parts:
-                    fmt_str = ", ".join(fmt_parts)
-                    args_str = ", ".join(arg_parts)
-                    f.write(
-                        f"            RCLCPP_DEBUG(logger, \"RX {msg['name']}: {fmt_str}\", {args_str});\n"
-                    )
-                else:
-                    f.write(
-                        f"            RCLCPP_DEBUG(logger, \"RX {msg['name']}\");\n"
-                    )
+                if msg.get('log', True):
+                    if fmt_parts:
+                        fmt_str = ", ".join(fmt_parts)
+                        args_str = ", ".join(arg_parts)
+                        f.write(
+                            f"            RCLCPP_DEBUG(logger, \"RX {msg['name']}: {fmt_str}\", {args_str});\n"
+                        )
+                    else:
+                        f.write(
+                            f"            RCLCPP_DEBUG(logger, \"RX {msg['name']}\");\n"
+                        )
                 
                 f.write(f"            if (pubs.pub_{msg['name']}) {{\n")
                 f.write(f"                pubs.pub_{msg['name']}->publish(msg);\n")

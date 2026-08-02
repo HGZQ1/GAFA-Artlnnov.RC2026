@@ -29,6 +29,9 @@ from .config import (
     TARGET_TIMEOUT_S,
     STOP_DISTANCE_M,       ALIGN_THRESHOLD_DEG,       CAM_X_OFFSET_M,
     KFS_STOP_DISTANCE_M,   KFS_ALIGN_THRESHOLD_DEG,   KFS_CAM_X_OFFSET_M,
+    WEAPON_SERVO_LEVEL,    WEAPON_SERVO_LEVEL_WAIT_S,
+    WEAPON_SEARCH_DELAY_S, WEAPON_SEARCH_YAW_LIMIT_DEG,
+    WEAPON_SEARCH_YAW_RATE_DEG_S, WEAPON_SEARCH_YAW_TOL_DEG,
 )
 
 MODEL_SCENARIO_MAP = {
@@ -76,6 +79,16 @@ class ProcessorNode(Node):
         self._odom_theta = 0.0
         self._odom_dist  = 0.0
 
+        self._weapon_search_active = False
+        self._weapon_search_center_yaw = 0.0
+        self._weapon_search_idx = 0
+        self._weapon_search_offsets = [
+            -WEAPON_SEARCH_YAW_LIMIT_DEG,
+            0.0,
+            WEAPON_SEARCH_YAW_LIMIT_DEG,
+            0.0,
+        ]
+
         self._nav_move_mode     = 0
         self._nav_height_diff   = 0.0
         self._nav_speed_factor  = 1.0
@@ -92,6 +105,7 @@ class ProcessorNode(Node):
         # game_controller 阶段感知 (None = 无控制器, 向后兼容)
         self._game_phase    = None
         self._cam_x_offset  = CAM_X_OFFSET_M   # 当前阶段的D435i横向偏移，随阶段切换
+        self.decision.enable_weapon_servo = self._weapon_servo_enabled()
 
         self.camera_matrix = np.array([
             [913.461, 0.0, 650.967],
@@ -125,6 +139,7 @@ class ProcessorNode(Node):
 
         self.chassis_pub    = self.create_publisher(Twist,    '/serial/chassis_cmd', 10)
         self.meilin_cmd_pub = self.create_publisher(Twist,    '/serial/meilin_cmd', 10)
+        self.weapon_servo_pub = self.create_publisher(UInt8,  '/serial/weapon_servo_cmd', 10)
         self.arm_pub        = self.create_publisher(PointStamped, '/arm/target_pos', 10)
         self.state_pub      = self.create_publisher(String,   '/decision/state', 10)
         self.state_id_pub   = self.create_publisher(Int8,     '/decision/state_id', 10)
@@ -173,7 +188,8 @@ class ProcessorNode(Node):
             self._nav_dist_to_next  = msg.data[4]
             self._nav_speed_factor  = msg.data[5]
             self._nav_torque_factor = msg.data[6]
-            if isinstance(self.current_scenario, ScenarioMeilin):
+            # game_controller存在时由它独占 /serial/meilin_cmd，避免双发布抢下位机。
+            if isinstance(self.current_scenario, ScenarioMeilin) and self._game_phase is None:
                 self._publish_meilin_cmd()
 
     # ── 比赛阶段联动 ──
@@ -181,6 +197,7 @@ class ProcessorNode(Node):
     def _on_game_phase(self, msg: String):
         old = self._game_phase
         self._game_phase = msg.data
+        self.decision.enable_weapon_servo = self._weapon_servo_enabled()
 
         was_servo = old in VISUAL_SERVO_PHASES
         is_servo  = self._game_phase in VISUAL_SERVO_PHASES
@@ -189,24 +206,33 @@ class ProcessorNode(Node):
             self.decision.pause_at_arrived = True
             self.decision._reset_tracking()
             self.decision.state = RobotState.SEARCHING
+            self._latest_cmd = Twist()
+            self._last_seen_t = time.time()
             if self._game_phase == 'ALIGN_KFS':
                 self.decision.stop_dist     = KFS_STOP_DISTANCE_M
                 self.decision.align_thr_deg = KFS_ALIGN_THRESHOLD_DEG
                 self._cam_x_offset          = KFS_CAM_X_OFFSET_M
+                self._stop_weapon_search()
             else:
                 self.decision.stop_dist     = STOP_DISTANCE_M
                 self.decision.align_thr_deg = ALIGN_THRESHOLD_DEG
                 self._cam_x_offset          = CAM_X_OFFSET_M
+                self._reset_weapon_search_center()
             self.get_logger().info(
                 f'进入视觉对齐模式 ({self._game_phase}) | '
                 f'stop={self.decision.stop_dist:.2f}m '
                 f'thr={self.decision.align_thr_deg:.1f}° '
-                f'x_off={self._cam_x_offset:.3f}m')
+                f'x_off={self._cam_x_offset:.3f}m '
+                f'weapon_servo={self.decision.enable_weapon_servo}')
 
         if was_servo and not is_servo:
             self.decision.pause_at_arrived = False
+            self.decision.enable_weapon_servo = self._weapon_servo_enabled()
             self.decision._reset_tracking()
             self.decision.state = RobotState.SEARCHING
+            self._latest_cmd = Twist()
+            self._stop_weapon_search()
+            self.chassis_pub.publish(Twist())
             self.get_logger().info('退出视觉对齐模式')
 
     # ── 夹爪反馈 ──
@@ -222,6 +248,60 @@ class ProcessorNode(Node):
             return True
         return self._game_phase in VISUAL_SERVO_PHASES
 
+    def _weapon_servo_enabled(self) -> bool:
+        if self._game_phase is None:
+            return isinstance(self.current_scenario, ScenarioWuguan)
+        return self._game_phase == 'ALIGN_WEAPON'
+
+    @staticmethod
+    def _normalize_angle(angle: float) -> float:
+        while angle > math.pi:
+            angle -= 2.0 * math.pi
+        while angle <= -math.pi:
+            angle += 2.0 * math.pi
+        return angle
+
+    def _reset_weapon_search_center(self):
+        self._weapon_search_active = False
+        self._weapon_search_center_yaw = self._odom_theta
+        self._weapon_search_idx = 0
+
+    def _stop_weapon_search(self):
+        if self._weapon_search_active:
+            self.get_logger().info('武器头搜索: 已识别到目标, 退出搜索摆动')
+        self._weapon_search_active = False
+        self._weapon_search_idx = 0
+
+    def _weapon_search_cmd(self) -> Twist:
+        if not self._weapon_search_active:
+            self._weapon_search_active = True
+            self._weapon_search_center_yaw = self._odom_theta
+            self._weapon_search_idx = 0
+            self.get_logger().warn(
+                f'ALIGN_WEAPON 超过{WEAPON_SEARCH_DELAY_S:.1f}s未识别到武器头, '
+                f'开始±{WEAPON_SEARCH_YAW_LIMIT_DEG:.0f}deg原地搜索')
+
+        target_offset_deg = self._weapon_search_offsets[self._weapon_search_idx]
+        target_yaw = self._normalize_angle(
+            self._weapon_search_center_yaw + math.radians(target_offset_deg))
+        err = self._normalize_angle(target_yaw - self._odom_theta)
+        err_deg = math.degrees(err)
+
+        if abs(err_deg) <= WEAPON_SEARCH_YAW_TOL_DEG:
+            self._weapon_search_idx = (
+                self._weapon_search_idx + 1) % len(self._weapon_search_offsets)
+            target_offset_deg = self._weapon_search_offsets[self._weapon_search_idx]
+            target_yaw = self._normalize_angle(
+                self._weapon_search_center_yaw + math.radians(target_offset_deg))
+            err = self._normalize_angle(target_yaw - self._odom_theta)
+            err_deg = math.degrees(err)
+
+        cmd = Twist()
+        cmd.linear.x = 0.0
+        cmd.linear.y = 0.0
+        cmd.angular.z = math.copysign(WEAPON_SEARCH_YAW_RATE_DEG_S, err_deg)
+        return cmd
+
     # ── 模型联动 ──
 
     def _on_model_changed(self, msg: String):
@@ -236,6 +316,7 @@ class ProcessorNode(Node):
         self.current_scenario = scenario_cls()
         self.current_model    = model_name
         self.decision.reset_all()
+        self.decision.enable_weapon_servo = self._weapon_servo_enabled()
 
         self.get_logger().info(f'scene switch: {old} -> {type(self.current_scenario).__name__}')
         scene_msg = String()
@@ -305,6 +386,9 @@ class ProcessorNode(Node):
             return
         if action == 'IGNORE':
             return
+
+        if self._game_phase == 'ALIGN_WEAPON':
+            self._stop_weapon_search()
 
         self._last_seen_t    = time.time()
         self._cur_class_id   = class_id
@@ -378,9 +462,13 @@ class ProcessorNode(Node):
                 f' | pick_t: {d.pick_elapsed:.1f}/{d.pick_duration:.0f}s'
                 f' | arm_d: {d.arm_target_dist:.3f}m'
             )
+        elif d.state == RobotState.SERVO_WAIT:
+            line += f' | flip_wait: {d.servo_wait_remain:.1f}s'
         elif d.state == RobotState.MOVING:
             remain = max(0, d.target_distance - d.stop_dist)
-            line += f' | remain: {remain:.2f}m'
+            line += f' | remain: {remain:.2f}m | vx: {d.forward_speed_cmd:.2f}m/s'
+            if d.weapon_speed_limited:
+                line += f' cap:{d.weapon_approach_max_speed:.2f}'
 
         self.get_logger().info(line)
 
@@ -419,6 +507,12 @@ class ProcessorNode(Node):
         elif ev == 'ALIGNED':
             self.get_logger().info(
                 f'>> ALIGNED | ang: {d.align_angle_deg:+.1f}\u00b0 -> MOVING')
+        elif ev == 'WEAPON_SERVO_LEVEL':
+            self._publish_weapon_servo(WEAPON_SERVO_LEVEL)
+            self.get_logger().info(
+                f'>> WEAPON_SERVO_LEVEL | ALIGNING完成, '
+                f'发送FLIP摆平({WEAPON_SERVO_LEVEL}), '
+                f'等待{WEAPON_SERVO_LEVEL_WAIT_S:.1f}s -> MOVING')
         elif ev == 'ARRIVED':
             self.get_logger().info(
                 f'>> ARRIVED | dist: {d.target_distance:.2f}m <= '
@@ -435,7 +529,8 @@ class ProcessorNode(Node):
         msg = Twist()
         msg.linear.x  = float(cmd_dict.get('forward_dist', 0.0))   # vx m/s
         msg.linear.y  = float(cmd_dict.get('drive_wheels', 0.0))   # vy m/s
-        msg.angular.z = float(cmd_dict.get('turn_angle',   0.0))   # 旋转角度 deg
+        # 历史key名保留为turn_angle；串口协议实际要求angular.z为yaw rate(deg/s)。
+        msg.angular.z = float(cmd_dict.get('turn_angle',   0.0))   # wz deg/s
         return msg
 
     def _publish_meilin_cmd(self):
@@ -446,6 +541,11 @@ class ProcessorNode(Node):
         msg.angular.x = float(self._nav_height_diff)
         msg.angular.y = 0.0
         self.meilin_cmd_pub.publish(msg)
+
+    def _publish_weapon_servo(self, pose: int):
+        msg = UInt8()
+        msg.data = int(pose)
+        self.weapon_servo_pub.publish(msg)
 
     def _publish_arm_target(self, base_x, base_y, base_z, stamp):
         arm = self.tf_manager.transform_base_to_arm(base_x, base_y, base_z)
@@ -461,19 +561,32 @@ class ProcessorNode(Node):
 
     def _timer_cb(self):
         now = time.time()
+        if (self.decision.state == RobotState.SERVO_WAIT
+                and self.decision.enable_weapon_servo):
+            self._publish_weapon_servo(WEAPON_SERVO_LEVEL)
+
         if (now - self._last_seen_t) > self.TARGET_TIMEOUT:
             if self._visual_servo_active():
-                cmd_dict = self.decision.update(
-                    detected=False, base_x=0.0, base_y=0.0,
-                    distance=0.0, align_angle=0.0,
-                    arm_distance=0.0)
-
-                if self.decision.state == RobotState.SEARCHING:
-                    self._latest_cmd = self._build_chassis_cmd(cmd_dict)
-                elif self.decision.state in (RobotState.PICKING, RobotState.ARRIVED):
-                    pass
+                weapon_search_allowed = self.decision.state in (
+                    RobotState.SEARCHING,
+                    RobotState.ALIGNING,
+                )
+                if (self._game_phase == 'ALIGN_WEAPON'
+                        and weapon_search_allowed
+                        and (now - self._last_seen_t) >= WEAPON_SEARCH_DELAY_S):
+                    self._latest_cmd = self._weapon_search_cmd()
                 else:
-                    self._latest_cmd = self._build_chassis_cmd(cmd_dict)
+                    cmd_dict = self.decision.update(
+                        detected=False, base_x=0.0, base_y=0.0,
+                        distance=0.0, align_angle=0.0,
+                        arm_distance=0.0)
+
+                    if self.decision.state == RobotState.SEARCHING:
+                        self._latest_cmd = self._build_chassis_cmd(cmd_dict)
+                    elif self.decision.state in (RobotState.PICKING, RobotState.ARRIVED):
+                        pass
+                    else:
+                        self._latest_cmd = self._build_chassis_cmd(cmd_dict)
 
                 if self.decision.event:
                     self._print_event()

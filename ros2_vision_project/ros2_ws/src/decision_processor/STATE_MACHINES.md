@@ -23,9 +23,10 @@ NAV_TO_WEAPON
    ▼
 ALIGN_WEAPON  ◄── 此阶段会被 processor_node 接管 (VISUAL_SERVO_PHASES)
    │ 视觉伺服五状态机跑完到 ARRIVED (decision_state_id == ARRIVED)
-   │ → 停车, 发送"拾取武器端头"动作组指令
+   │ → 停车, 进入 GRAB_WEAPON
    ▼
 GRAB_WEAPON
+   │ 持续停车, 等待 GRAB_WEAPON_SETTLE_S 后发送"拾取武器端头"动作组
    │ 收到下位机动作完成反馈 (action_status == DONE)
    │ → 重置导航
    ▼
@@ -34,15 +35,11 @@ NAV_TO_ASSEMBLY
    ▼
 WAIT_ASSEMBLY
    │ 一次性发送"底盘锁死"指令(等R1组装)
-   │ 收到组装完成反馈 (assembly_status == DONE)
-   │ → 发送"释放武器端头"动作组
+   │ 收到 R1 信号 = ENTER_MERLIN
+   │ → 同时视为组装完成, 切换/预加载 kfs.pt, 发送"释放武器端头"动作组
    ▼
 RELEASE_WEAPON
-   │ 等待 PHASE_SWITCH_WAIT_S 秒(给下位机执行时间)
-   ▼
-WAIT_ENTER_MERLIN
-   │ 收到 R1 信号 = ENTER_MERLIN (R1完成组装,通知R2进入梅林)
-   │ → 重置导航
+   │ 等待 PHASE_SWITCH_WAIT_S 秒(给下位机执行时间)                              PHASE_SWITCH_WAIT_S = 阶段切换缓冲时间
    ▼
 NAV_TO_MERLIN_ENTRY
    │ 导航到梅林入口, 到达
@@ -60,10 +57,18 @@ MERLIN_PHASE  ────────────► (展开见 1.2 梅林子�
 M_INIT
    │ 调用 meilin_path_planner.plan_path(入口, 真KFS列表, 假KFS列表)
    │ 规划出一条避开假KFS、途经真KFS的方块路径
+   │ 若真KFS在1/2/3入口台阶:
+   │   - 记录 pre_entry_pickups
+   │   - 强制从对应入口进入
+   │   - 入口KFS不再作为梅林内部拾取目标
    │ 失败 → 直接 STOP（无可行路径）
    ▼
 M_ENTRY_NAV
    │ Nav2导航到入口爬升触发点, 到达
+   │ 若存在未拾取的入口KFS:
+   │   → kfs_target=该入口KFS, 进入 M_ALIGN_KFS
+   │ 否则:
+   │   → 进入 M_ENTRY_CLIMB
    ▼
 M_ENTRY_CLIMB
    │ 发送入口爬升指令(/serial/meilin_cmd, ENTRY_CLIMB_CMD)
@@ -76,6 +81,16 @@ M_ON_BLOCK ◄──────────────────────
    │     → kfs_target=该KFS, 进 M_PICKUP_NAV          │
    │  ② 若cur是路径最后一块(出口) → 进 M_EXIT_NAV     │
    │  ③ 否则 → 进 M_NAV_TO_TRIGGER                    │
+   │                                                    │
+   ├─入口前拾取分支 (由 M_ENTRY_NAV 直接进入)            │
+   │  M_ALIGN_KFS                                       │
+   │     │ 在入口前坐标点对齐目标入口KFS                 │
+   │     │ 后续复用 M_ARM_LIFT → M_FINE_ALIGN → M_PICKUP_KFS
+   │     │ M_ARM_LIFT 比较高度时当前高度按入口地面0mm处理 │
+   │     │ M_PICKUP_KFS完成后:
+   │     │   - 若还有入口KFS → 回 M_ENTRY_NAV
+   │     │   - 若当前入口就是路径入口 → M_ENTRY_CLIMB
+   │     │   - 否则 → 回 M_ENTRY_NAV 导航到最终入口
    │                                                    │
    ├─① M_PICKUP_NAV                                    │
    │     │ 计算面向KFS方块的触发点(compute_trigger_point) │
@@ -103,6 +118,7 @@ M_ON_BLOCK ◄──────────────────────
    │     │   若下一方块就是该KFS方块 → M_SEND_CLIMB     │
    │     │   否则 → M_NAV_TO_TRIGGER                    │
    │     │ 超时(MERLIN_PICKUP_WAIT_S) → 跳过, M_NAV_TO_TRIGGER │
+   │     │ 入口前拾取时完成/超时后按"入口前拾取分支"规则跳转 │
    │                                                    │
    ├─③ M_NAV_TO_TRIGGER                                │
    │     │ 计算 cur→next 之间的爬升/下降触发点           │
@@ -110,7 +126,9 @@ M_ON_BLOCK ◄──────────────────────
    │     ▼                                             │
    │  M_SEND_CLIMB                                     │
    │     │ get_transition_climb(cur,next) 得到爬升/下降指令 │
-   │     │ 非0则发送 /serial/meilin_cmd (含高度差)       │
+   │     │ 非0则发送 /serial/meilin_cmd                 │
+   │     │   linear.x=next_block, linear.y=climb_mode,  │
+   │     │   angular.x=height_diff_mm                   │
    │     ▼                                             │
    │  M_CLIMB_WAIT                                     │
    │     │ 等待 MERLIN_CLIMB_WAIT_S 秒                  │
@@ -417,8 +435,8 @@ if self.decision.state == RobotState.PICKING:
 | cmd_dict 键 | 含义 | 仅在哪个状态非0 |
 |---|---|---|
 | `search_rotate` | 原地旋转搜索 | SEARCHING |
-| `turn_angle` / `turn_wheels` | 转向角度(°) / 转向轮圈数 | ALIGNING |
-| `forward_dist` / `drive_wheels` | 前进距离(m) / 驱动轮圈数 | MOVING |
+| `turn_angle` / `turn_wheels` | 历史key名；当前 `turn_angle` 数值作为 yaw rate(deg/s) 下发 | ALIGNING |
+| `forward_dist` / `drive_wheels` | 历史key名；当前分别作为 vx/vy(m/s) 下发 | MOVING |
 | `pickup_action` / `arm_distance` | 拾取动作标志 / 机械臂目标距离 | PICKING |
 
-`_build_chassis_cmd` 目前只把 `forward_dist→linear.x`、`drive_wheels→linear.y`、`turn_angle→angular.z` 打包进 `/serial/chassis_cmd`；`pickup_action`/`arm_distance`/`turn_wheels`/`search_rotate` **没有被映射进Twist**，如笔记里"串口通信映射"部分所写，这部分协议字段还需在 `processor_node` 里补充对应逻辑。
+`_build_chassis_cmd` 目前只把 `forward_dist→linear.x(vx m/s)`、`drive_wheels→linear.y(vy m/s)`、`turn_angle→angular.z(wz deg/s)` 打包进 `/serial/chassis_cmd`；`pickup_action`/`arm_distance`/`turn_wheels`/`search_rotate` **没有被映射进Twist**，如笔记里"串口通信映射"部分所写，这部分协议字段还需在 `processor_node` 里补充对应逻辑。

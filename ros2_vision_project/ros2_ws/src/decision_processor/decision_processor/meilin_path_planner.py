@@ -6,6 +6,7 @@ meilin_path_planner.py
   - 入口: 1,2,3    出口: 10,11,12
   - 只能前进(row+1) / 左(col-1) / 右(col+1), 不能后退
   - 真KFS可从其4方向相邻台阶拾取，无需进入KFS台阶本身
+  - 真KFS若位于入口台阶1/2/3，必须先在对应入口前拾取，再从该入口进入
   - 只有路径必须经过该台阶时才将真KFS台阶纳入路径
   - 假KFS所在方块为障碍 (不可通行)
 
@@ -59,6 +60,50 @@ def _all_neighbors(block: int) -> set:
         if abs(r2 - r) + abs(c2 - c) == 1:
             result.add(bid)
     return result
+
+
+def get_pre_entry_pickups(real_kfs: list) -> list:
+    """
+    返回需要在入口爬升前拾取的真KFS台阶。
+
+    新规则：真KFS如果位于1/2/3号入口台阶，不能先进入梅林后再拾取，
+    必须在对应 MERLIN_ENTRY_CLIMB_POINTS 入口前坐标完成对齐和拾取。
+    """
+    pickups = []
+    for block in real_kfs:
+        if block in MEILIN_ENTRY_BLOCKS and block not in pickups:
+            pickups.append(block)
+    return pickups
+
+
+def resolve_entry_block(preferred_entry: int, real_kfs: list, fake_kfs: list) -> int:
+    """
+    根据KFS输入选择实际入口。
+
+    - 若真KFS在入口台阶1/2/3，入口被强制为对应台阶；
+      preferred_entry 若也是这些入口KFS之一，则优先使用 preferred_entry。
+    - 否则沿用 preferred_entry，若它被假KFS占用则退到其他可用入口。
+
+    Returns:
+        入口台阶标签；0表示无可用入口。
+    """
+    obstacles = set(fake_kfs)
+    pre_entry_pickups = get_pre_entry_pickups(real_kfs)
+
+    if pre_entry_pickups:
+        if any(block in obstacles for block in pre_entry_pickups):
+            return 0
+        if preferred_entry in pre_entry_pickups:
+            return preferred_entry
+        return pre_entry_pickups[0]
+
+    if preferred_entry in MEILIN_ENTRY_BLOCKS and preferred_entry not in obstacles:
+        return preferred_entry
+
+    for entry in MEILIN_ENTRY_BLOCKS:
+        if entry not in obstacles:
+            return entry
+    return 0
 
 
 # ═══════════════════════════════════════
@@ -143,6 +188,8 @@ def plan_path(entry_block: int, real_kfs: list, fake_kfs: list) -> list:
     规划梅林路径。
 
     真KFS可从4方向相邻台阶侧向/前向拾取，无需进入KFS台阶本身。
+    若真KFS位于入口台阶1/2/3，则强制从对应入口进入，由上层状态机
+    在入口爬升前完成对齐/拾取。
     只有当路径本就需要经过KFS台阶（如绕行不可行）时才将其纳入路径。
 
     Args:
@@ -154,16 +201,23 @@ def plan_path(entry_block: int, real_kfs: list, fake_kfs: list) -> list:
         方块列表 [entry, ..., exit]，空列表=无可行路径
     """
     obstacles = set(fake_kfs)
+    pre_entry_pickups = get_pre_entry_pickups(real_kfs)
+    in_merlin_kfs = [kfs for kfs in real_kfs if kfs not in pre_entry_pickups]
+    selected_entry = resolve_entry_block(entry_block, real_kfs, fake_kfs)
+    if selected_entry == 0:
+        return []
 
-    if entry_block not in obstacles:
-        entries = [entry_block] + [e for e in MEILIN_ENTRY_BLOCKS
-                                   if e != entry_block and e not in obstacles]
+    if pre_entry_pickups:
+        entries = [selected_entry]
     else:
-        entries = [e for e in MEILIN_ENTRY_BLOCKS if e not in obstacles]
+        entries = [selected_entry] + [
+            e for e in MEILIN_ENTRY_BLOCKS
+            if e != selected_entry and e not in obstacles
+        ]
 
     best = None
     for entry in entries:
-        path = _plan_with_coverage(entry, real_kfs, obstacles)
+        path = _plan_with_coverage(entry, in_merlin_kfs, obstacles)
         if path and (best is None or len(path) < len(best)):
             best = path
 
@@ -209,6 +263,15 @@ def get_transition_climb(from_block: int, to_block: int) -> int:
     elif diff < -50:
         return DESCEND_1
     return 0
+
+
+def get_transition_height_diff_mm(from_block: int, to_block: int) -> int:
+    """
+    计算两个方块之间的高度差，单位mm。
+
+    正数表示目标方块更高，负数表示目标方块更低。
+    """
+    return BLOCK_HEIGHTS_MM.get(to_block, 0) - BLOCK_HEIGHTS_MM.get(from_block, 0)
 
 
 def compute_trigger_point(from_block: int, to_block: int) -> tuple:

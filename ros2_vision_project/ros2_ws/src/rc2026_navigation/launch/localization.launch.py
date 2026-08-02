@@ -36,7 +36,7 @@ import os
 
 from launch import LaunchDescription
 from launch.actions import (
-    DeclareLaunchArgument, IncludeLaunchDescription, TimerAction,
+    DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, TimerAction,
 )
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -181,6 +181,8 @@ def generate_launch_description():
                 'icp_max_dist':     0.5,
                 'icp_min_fitness':  0.05,
                 'voxel_size':       0.1,
+                'max_correction_xy': 1.0,
+                'max_correction_yaw_deg': 30.0,
             }],
         )],
     )
@@ -189,6 +191,14 @@ def generate_launch_description():
         field_side_arg,
         use_reloc_arg,
         prior_x_arg, prior_y_arg, prior_yaw_arg,
+        LogInfo(msg=[
+            '[localization] field_side=', LaunchConfiguration('field_side'),
+            ' map_file=', map_file,
+            ' prior_offset=(',
+            LaunchConfiguration('prior_offset_x'), ', ',
+            LaunchConfiguration('prior_offset_y'), ', ',
+            LaunchConfiguration('prior_offset_yaw'), ')',
+        ]),
         livox_launch,
         fastlio_launch,
         odom_to_camera_init_tf,

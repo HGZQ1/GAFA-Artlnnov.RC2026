@@ -46,7 +46,7 @@ class MeilinNavigator(Node):
         data[0] = current_block   当前方块号（0=entry, 99=exit）
         data[1] = next_block      下一目标方块号
         data[2] = move_mode       0=FLAT,1=CLIMB,2=DESCEND,3=SETTLE,4=DONE
-        data[3] = height_diff     当前→下一方块的高度差（米，正=上坡）
+        data[3] = height_diff     当前→下一方块的高度差（mm，正=上坡）
         data[4] = dist_to_next    到下一方块中心的估计距离（米）
         data[5] = speed_factor    建议速度系数（0~1）
         data[6] = torque_factor   建议驱动力系数（0~1）
@@ -159,7 +159,7 @@ class MeilinNavigator(Node):
         计算当前应该使用的运动模式和建议速度
 
         Returns:
-            (move_mode_str, height_diff, speed_factor, torque_factor)
+            (move_mode_str, height_diff_mm, speed_factor, torque_factor)
         """
         cur  = self._get_current_block()
         next = self._get_next_block()
@@ -178,12 +178,12 @@ class MeilinNavigator(Node):
         if self._in_settle:
             return MoveMode.SETTLE, h_diff, 0.0, 0.0
 
-        if h_diff > 0.03:   # 上坡（高度差 > 3cm）
+        if h_diff > 50:   # 上坡（高度差 > 50mm）
             speed  = self._slope_speed_factor(abs(self._pitch_deg))
             torque = self._slope_torque_factor(abs(self._pitch_deg))
             return MoveMode.CLIMB, h_diff, speed, torque
 
-        elif h_diff < -0.03:  # 下坡
+        elif h_diff < -50:  # 下坡（高度差 < -50mm）
             from .config import BRAKE_FACTOR_SLOPE
             speed  = BRAKE_FACTOR_SLOPE
             torque = 0.5

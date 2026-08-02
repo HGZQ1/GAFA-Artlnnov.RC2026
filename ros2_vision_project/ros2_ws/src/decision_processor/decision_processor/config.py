@@ -17,27 +17,12 @@ import os as _os
 #   接近控制:
 #     STOP_DISTANCE_M      — 停在距武器多远触发抓取 (m)
 #     FORWARD_SPEED_GAIN   — 前进速度增益，>1 接近更快，<1 更慢
+#     WEAPON_APPROACH_MAX_SPEED_MPS — 武器头视觉接近阶段最大前进速度 (m/s)
 #
 #   相机标定 (需与 URDF camera_x/y/z/rpy 保持一致):
 #     CAMERA_OFFSET_*      — 相机相对 base_link 的安装位置 (m)
 #     CAMERA_PITCH_RAD     — 相机俯仰角 (正=朝上, 负=朝下)
 # ╚══════════════════════════════════════════════════════════════════╝
-# ── 武器头对齐参数 (ALIGN_WEAPON 阶段, D435i + best.pt/wuqi.pt) ──────
-ALIGN_THRESHOLD_DEG  = 5.0     # 对齐完成角度容差 (度)，越小越精准但越难到达
-STOP_DISTANCE_M      = 0.20    # 前进停止距离 (m, D435i到武器头)
-CAM_X_OFFSET_M       = 0.0     # D435i画面横向偏移补偿 (m)，正=目标偏画面右时算对齐，负=偏左
-
-# ── KFS粗对齐参数 (ALIGN_KFS 阶段, D435i + kfs.pt) ──────────────────
-KFS_ALIGN_THRESHOLD_DEG = 5.0  # 对齐完成角度容差 (度)
-KFS_STOP_DISTANCE_M     = 0.50 # 前进停止距离 (m, D435i到KFS方块)
-KFS_CAM_X_OFFSET_M      = 0.0  # D435i画面横向偏移补偿 (m)，正=目标偏画面右时算对齐，负=偏左
-
-ALIGN_TURN_GAIN      = 1.0     # 转向速度增益 (1.0=直接用偏角, 0.5=减半)，武器头/KFS共用
-FORWARD_SPEED_GAIN   = 1.0     # 前进速度增益
-WUGUAN_CONF_MIN      = 0.70    # 武馆 YOLO 置信度最低阈值
-WUGUAN_TOTAL_WEAPONS = 1     # 武馆拾取总数 (999=不限, 比赛改3)
-CONFIRM_FRAMES       = 3       # 连续N帧确认目标锁定（越大越稳但越慢响应）
-TARGET_TIMEOUT_S     = 0.5     # 目标消失超过此时间视为丢失 (s)
 
 # ══════════════════════════════════════
 #   场地半场选择
@@ -49,6 +34,34 @@ TARGET_TIMEOUT_S     = 0.5     # 目标消失超过此时间视为丢失 (s)
 #     2. 启动时传参: field_side:=right (由 launch 文件注入环境变量)
 # ══════════════════════════════════════
 FIELD_SIDE = _os.environ.get('RC2026_FIELD_SIDE', 'left')
+
+# ── 武器头对齐参数 (ALIGN_WEAPON 阶段, D435i + best.pt/wuqi.pt) ──────
+ALIGN_THRESHOLD_DEG  = 2.0     # 对齐完成角度容差 (度)，越小越精准但越难到达
+STOP_DISTANCE_M      = 0.19    # 前进停止距离 (m, D435i到武器头)
+CAM_X_OFFSET_BY_SIDE_M = {
+    'left':  0.0655,  # 左半场D435i画面横向偏移补偿 (m)
+    'right': 0.0355,  # 右半场D435i画面横向偏移补偿 (m)，现场标定后单独修改
+}
+CAM_X_OFFSET_M = CAM_X_OFFSET_BY_SIDE_M.get(
+    FIELD_SIDE, CAM_X_OFFSET_BY_SIDE_M['left'])
+# D435i画面横向偏移补偿 (m)，正=目标偏画面右时算对齐，负=偏左
+
+# ── KFS粗对齐参数 (ALIGN_KFS 阶段, D435i + kfs.pt) ──────────────────
+KFS_ALIGN_THRESHOLD_DEG = 5.0  # 对齐完成角度容差 (度)
+KFS_STOP_DISTANCE_M     = 0.50 # 前进停止距离 (m, D435i到KFS方块)
+KFS_CAM_X_OFFSET_M      = 0.0  # D435i画面横向偏移补偿 (m)，正=目标偏画面右时算对齐，负=偏左
+
+ALIGN_TURN_GAIN      = 1.0     # 转向速度增益 (1.0=直接用偏角, 0.5=减半)，武器头/KFS共用
+FORWARD_SPEED_GAIN   = 1.0     # 前进速度增益
+WEAPON_APPROACH_MAX_SPEED_MPS = 0.10  # 武器头MOVING阶段最大前进速度 (m/s)，只限ALIGN_WEAPON
+WEAPON_SEARCH_DELAY_S = 3.0           # ALIGN_WEAPON阶段连续未识别目标超过该时间后开始原地搜索 (s)
+WEAPON_SEARCH_YAW_LIMIT_DEG = 5.0    # 武器头搜索左右摆动幅度: 以到达目标时朝向为0点, 左右各5度
+WEAPON_SEARCH_YAW_RATE_DEG_S = 0.5   # 武器头搜索原地旋转角速度 (deg/s)，强制按该值直接下发
+WEAPON_SEARCH_YAW_TOL_DEG = 2.0       # 搜索摆动到达端点/中点的角度容差 (deg)
+WUGUAN_CONF_MIN      = 0.50    # 武馆 YOLO 置信度最低阈值
+WUGUAN_TOTAL_WEAPONS = 1     # 武馆拾取总数 (999=不限, 比赛改3)
+CONFIRM_FRAMES       = 3       # 连续N帧确认目标锁定（越大越稳但越慢响应）
+TARGET_TIMEOUT_S     = 0.5     # 目标消失超过此时间视为丢失 (s)
 
 # ══════════════════════════════════════
 #   TF 坐标系名称定义
@@ -71,18 +84,18 @@ FRAME_ARM_BASE     = FRAME_KFS_ARM          # 兼容旧代码 (tf_manager.py)
 # ══════════════════════════════════════════════════════════════════
 
 # ── D435i 主视觉相机（武器头对齐用）──────────────────────────────
-CAMERA_OFFSET_X   =  0.05    # 相对 base_link 前方偏移 (m)
-CAMERA_OFFSET_Y   =  0.0     # 横向偏移 (m，正=左)
-CAMERA_OFFSET_Z   =  0.45    # 高度 (m，从底盘底面算)
+CAMERA_OFFSET_X   =  0.28    # 相对 base_link 前方偏移 (m)
+CAMERA_OFFSET_Y   =  -0.316   # 横向偏移 (m，正=左)
+CAMERA_OFFSET_Z   =  0.445   # 高度 (m，从底盘底面算)
 CAMERA_ROLL_RAD   =  0.0     # 滚转角 (rad)
 CAMERA_PITCH_RAD  =  0.0     # 俯仰角 (rad，朝下为负，如-0.262≈-15°)
 CAMERA_YAW_RAD    =  0.0     # 偏航角 (rad)
 
 # ── 武器头机械臂底座 ──────────────────────────────────────────────
 # ★ 待现场测量后修改，同步更新 robot_params.yaml ★
-WEAPON_ARM_OFFSET_X   =  0.05   # 相对 base_link 偏移 (m)
-WEAPON_ARM_OFFSET_Y   =  0.15
-WEAPON_ARM_OFFSET_Z   =  0.30
+WEAPON_ARM_OFFSET_X   =  0.51   # 相对 base_link 偏移 (m)
+WEAPON_ARM_OFFSET_Y   =  0.316
+WEAPON_ARM_OFFSET_Z   =  0.41
 WEAPON_ARM_ROLL_RAD   =  0.0
 WEAPON_ARM_PITCH_RAD  =  0.0
 WEAPON_ARM_YAW_RAD    =  0.0
@@ -379,8 +392,8 @@ BLOCK_ODOM_DISTANCES = {
 #     梅林出口 ──集合──▶ 出口集合点(-3.0, 8.4)
 #          └─ 向左移动2.4m ──▶ 出梅林点(-5.4, 8.4)
 #          └─ 向前移动3.2m ──▶ 对抗区入口(-5.4, 11.6)
-#          └─ 移动到KFS放置点(-0.56, 10.75) → 放置KFS
-#          └─ 移动到等待合体点(-3.0, 11.6) → 等待R1合体指令
+#          └─ 移动到KFS放置点(-0.56, 10.75) → R2自主放置KFS(ACTION_PLACE_KFS=5)
+#          └─ 移动到等待合体点(-3.0, 11.6) → D435i ArUco对齐 → 合体动作组 → 等R1指令释放KFS(ACTION_RELEASE_KFS=4)
 # ══════════════════════════════════════════════════════════════════
 
 # ── 武馆区域 ──────────────────────────────────────────────────────
@@ -388,12 +401,22 @@ WAYPOINT_START = {'x': -1.4, 'y': 0.4, 'yaw': 1.5708}
 # 左半场出发点，朝向y轴正方向（面向场地纵深）
 # 路径：先向前（y+）行走1.15m，再向右（x+）行走0.75m，到达武器架
 
-WAYPOINT_WEAPON_RACK = {'x': -0.65, 'y': 1.55, 'yaw': 0.0}
+WAYPOINT_WEAPON_RACK_BY_SIDE = {
+    'left':  {'x': -0.85, 'y': 1.32, 'yaw': 0.0},
+    'right': {'x':  0.85, 'y': 0.485, 'yaw': 3.1415},
+}
+WAYPOINT_WEAPON_RACK = dict(WAYPOINT_WEAPON_RACK_BY_SIDE.get(
+    FIELD_SIDE, WAYPOINT_WEAPON_RACK_BY_SIDE['left']))
 # 武器端头架前导航目标点，到达后激活视觉对齐（ALIGN_WEAPON阶段）
 # D435i识别武器头做旋转粗对齐，对齐完成后前进到 STOP_DISTANCE_M 处停止
 # ★ 待现场标定：用卷尺测量武器架正前方场地坐标后修改
 
-WAYPOINT_ASSEMBLY = {'x': -0.55, 'y': 0.4, 'yaw': 0.0}
+WAYPOINT_ASSEMBLY_BY_SIDE = {
+    'left':  {'x': -0.25, 'y': 0.3, 'yaw': 3.1415},
+    'right': {'x':  1.4, 'y': 0.4, 'yaw': 0.0},
+}
+WAYPOINT_ASSEMBLY = dict(WAYPOINT_ASSEMBLY_BY_SIDE.get(
+    FIELD_SIDE, WAYPOINT_ASSEMBLY_BY_SIDE['left']))
 # 武器端头组装等待点（R2与R1机器人组装对接位置）
 # 到达后发送底盘锁死（ACTION_LOCK_CHASSIS），等R1"组装完成"信号后松爪
 # ★ 待现场标定：与R1实际对接位置测量后修改
@@ -408,21 +431,27 @@ WAYPOINT_MERLIN_EXIT_GATHER = {'x': -3.0, 'y': 8.4, 'yaw': 1.5708}
 # 梅林出口集合点，从10/11/12号任意出口方块下来后先汇集至此
 # 朝向y轴正方向，为向左横移至出梅林点做准备
 
-WAYPOINT_EXIT_MERLIN = {'x': -5.4, 'y': 8.4, 'yaw': 1.5708}
+WAYPOINT_EXIT_MERLIN = {'x': -5.2, 'y': 8.4, 'yaw': 1.5708}
 # 出梅林点，从集合点向左（x减小方向）横移2.4m到达
 # 朝向y轴正方向，为向前纵向进入对抗区做准备
 
-WAYPOINT_CONFRONT_ENTRY = {'x': -5.4, 'y': 11.6, 'yaw': 0.0}
-# 对抗区入口关键点，从出梅林点向前（y+）纵移3.2m到达
-# 朝向x轴正方向（即朝向KFS放置点方向）
+WAYPOINT_CHONGWU_FINISH = {'x': -3.0, 'y': 8.4, 'yaw': 1.5708}
+# 崇武探幽完成停止点：武馆+梅林任务结束后停在梅林出口集合点
 
-WAYPOINT_KFS_PLACE = {'x': -0.56, 'y': 10.75, 'yaw': 0.0}
+WAYPOINT_JIUGONG_FINISH = {'x': -3.0, 'y': 10.5, 'yaw': 3.1415}
+# 九宫藏宝完成停止点：对抗区流程结束/等待合体位置
+
+WAYPOINT_CONFRONT_ENTRY = {'x': -5.2, 'y': 10.5, 'yaw': 1.5708}
+# 对抗区入口 / 停止爬坡点，从出梅林点向前（y+）纵移3.2m到达
+# 朝向y轴正方向
+
+WAYPOINT_KFS_PLACE = {'x': -0.25, 'y': 10.75, 'yaw': 0.0}
 # KFS放置点，底盘抬升40cm后执行放置动作组（ACTION_PLACE_KFS）
 # ★ 待现场标定：与放置台实际位置对齐后修改
 
-WAYPOINT_CONFRONT_WAIT = {'x': -3.0, 'y': 11.6, 'yaw': 0.0}
-# 合体等待点，KFS放置完成后移动至此等待来自R1的合体指令
-# 朝向x轴正方向，合体完成后底盘锁死不动
+WAYPOINT_CONFRONT_WAIT = {'x': -3.0, 'y': 10.6, 'yaw': 0.0}
+# 合体等待点，KFS放置完成后移动至此开启D435i ArUco合体对齐
+# 朝向x轴正方向，对齐完成后发送合体动作组
 
 # ══════════════════════════════════════════════════════════════════
 #   ★ 超时保护参数（所有时间单位: 秒）★
@@ -435,7 +464,9 @@ WAYPOINT_CONFRONT_WAIT = {'x': -3.0, 'y': 11.6, 'yaw': 0.0}
 # ── 比赛全局时间 ──────────────────────────────────────────────────
 MATCH_DURATION_S     = 240.0   # 比赛总时长 4分钟 (240s)
 MATCH_TIMEOUT_S      = 250.0   # 超过此时间后强制停机兜底 (4分10秒)
+SUBMATCH_TIMEOUT_S   = 180.0   # 崇武探幽/九宫藏宝单项限时 (s)
 PHASE_SWITCH_WAIT_S  = 1.0     # 阶段切换后稳定等待时间，避免连续跳阶段 (s)
+PRESTART_RELOCALIZE_TIMEOUT_S = 8.0  # 等待启动前重定位完成的最长时间 (s)
 
 # ── 梅林区域等待时间 ─────────────────────────────────────────────
 MERLIN_CLIMB_WAIT_S  = 20.0     # 发送爬升指令后等待下位机动作完成的最长时间 (s)
@@ -446,11 +477,20 @@ FINE_ALIGN_TIMEOUT_S   = 15.0  # 精对齐（USB相机）超时兜底，超时�
 DOCK_ALIGN_TIMEOUT_S   = 30.0  # 合体对齐（ArUco深度相机）超时兜底 (s)
 
 # ── 动作组超时保护 ───────────────────────────────────────────────
-WEAPON_GRAB_TIMEOUT_S = 15.0   # 抓取武器端头动作组超时（超时强制跳下一阶段）(s)
+WEAPON_GRAB_TIMEOUT_S = 5.0   # 抓取武器端头动作组超时（超时强制跳下一阶段）(s)
+RELEASE_WEAPON_WAIT_S = 10.0  # 释放武器端头后等待R1收好组装完成武器的时间 (s)
+
+# ── 武器头翻转舵机控制（Jetson → STM32, /serial/weapon_servo_cmd）────
+# STM32侧语义: $FLIP,0=下垂(842)  $FLIP,1=摆平(489)  $FLIP,2=上摆(119)
+WEAPON_SERVO_DROOP = 0          # 下垂位置：机械爪默认朝向
+WEAPON_SERVO_LEVEL = 1          # 摆平位置：武器头粗对齐完成后前进/抓取朝向
+WEAPON_SERVO_UP    = 2          # 上摆位置：当前流程暂不使用，预留
+WEAPON_SERVO_LEVEL_WAIT_S = 1.0 # 发送水平指令后等待舵机到位的时间 (s)
 
 # ── KFS放置控制（game_controller._tick_place_kfs）──────────────
 KFS_PLACE_STOP_WAIT_S = 0.3    # 到达KFS放置点后底盘停止稳定等待时间，避免平台晃动 (s)
 KFS_PLACE_CMD_DELAY_S = 0.5    # 放置KFS动作组指令的发送窗口时长（窗口内重发确保到达） (s)
+KFS_PLACE_ACTION_TIMEOUT_S = 10.0  # 进入PLACE_KFS后的最长等待时间，超时继续去合体等待点 (s)
 
 # ══════════════════════════════════════════════════════════════════
 #   动作组指令 (Jetson → STM32, /serial/action_group_cmd)
@@ -465,6 +505,7 @@ ACTION_PLACE_KFS      = 5   # 放置KFS (底盘抬升40cm + 放置动作组)
 ACTION_LOCK_CHASSIS   = 6   # 底盘锁死 (到达组装点/合体点后通知下位机)
 ACTION_ARM_LIFT_1     = 7   # 机械臂抬升1 (抓取比当前台阶高的KFS: 抬升+前伸+摄像头/吸盘转向下)
 ACTION_ARM_LIFT_2     = 8   # 机械臂抬升2 (抓取比当前台阶低的KFS: 同上, 抬升幅度不同)
+ACTION_MERGE          = 9   # 合体动作组 (ArUco对齐完成后触发)
 
 # ══════════════════════════════════════════════════════════════════
 #   动作组反馈 (STM32 → Jetson, /feedback/action_group)
@@ -486,9 +527,9 @@ ASSEMBLY_STATUS_FAILED      = 3
 #   R1 机器人通信信号
 # ══════════════════════════════════════════════════════════════════
 R1_SIGNAL_NONE          = 0   # 无信号
-R1_SIGNAL_ASSEMBLY_DONE = 1   # 组装完成信号
-R1_SIGNAL_ENTER_MERLIN  = 2   # 进入梅林信号
-R1_SIGNAL_MERGE         = 3   # 合体指令
+R1_SIGNAL_ENTER_MERLIN  = 2   # 进入梅林（同时视为组装完成，R1只需发此信号）
+R1_SIGNAL_PLACE_KFS     = 3   # 合体完成后释放KFS指令（触发 ACTION_RELEASE_KFS=4）
+R1_SIGNAL_MERGE         = R1_SIGNAL_PLACE_KFS  # 兼容旧命名
 
 # ══════════════════════════════════════════════════════════════════
 #   比赛指令常量
@@ -508,6 +549,28 @@ CLIMB_TRIGGER_DIST_M = 0.40   # 距台阶边缘40cm时触发爬升/下降
 
 ENTRY_CLIMB_CMD = {1: CLIMB_2, 2: CLIMB_1, 3: CLIMB_2}     # 梅林入口爬升指令
 EXIT_DESCEND_CMD = {10: DESCEND_1, 11: DESCEND_2, 12: DESCEND_1}     # 梅林出口下降指令
+
+# ── 对抗区入口上坡控制（GamePhase.CONFRONT_CLIMB）──────────────
+# 发送到 /serial/confront_climb_cmd (std_msgs/UInt8):
+#   1=进入爬坡模式, 0=退出爬坡模式
+CONFRONT_CLIMB_ENTER_CMD = 1
+CONFRONT_CLIMB_EXIT_CMD = 0
+CONFRONT_CLIMB_CMD = CONFRONT_CLIMB_ENTER_CMD
+CONFRONT_CLIMB_FORWARD_SPEED_MPS = 0.4  # 爬坡状态直发底盘前进速度, y=0/w=0, 不走cmd_vel限速
+CONFRONT_CLIMB_STOP_DIST_M = 0.40  # 距 WAYPOINT_CONFRONT_ENTRY 小于该值，立即退出爬坡
+CONFRONT_CLIMB_PITCH_DEG = 15.0   # 相对进入爬坡时的pitch变化>=该值，认为已经进入上坡段
+CONFRONT_CLIMB_EXIT_DELTA_DEG = 15.0  # 已上坡后，pitch从坡段峰值回落变化>=该值才退出爬坡
+CONFRONT_CLIMB_EXIT_STABLE_S = 0.4    # pitch回落满足退出条件后持续稳定该时间，避免单帧跳变误触发
+CONFRONT_CLIMB_TIMEOUT_S = 10.0    # 最长爬坡等待，超时默认退出爬坡
+CONFRONT_CLIMB_STOP_S = 1.0       # 退出爬坡后持续发送0速度，给下位机切PID/稳定
+CONFRONT_RELOCALIZE_TURN_DEG = 90.0  # 对抗区入口重定位前原地转角: 左半场顺时针, 右半场逆时针
+CONFRONT_RELOCALIZE_TURN_MAX_DEG_S = 35.0  # 重定位前原地转最大角速度, 直接发/serial/chassis_cmd (deg/s)
+CONFRONT_RELOCALIZE_TURN_MIN_DEG_S = 8.0   # 重定位前原地转最小有效角速度, 防止接近目标时不动
+CONFRONT_RELOCALIZE_TURN_KP = 1.2          # 重定位前原地转P控制, 输入deg误差, 输出deg/s
+CONFRONT_RELOCALIZE_TURN_YAW_TOL_DEG = 5.0 # 重定位前原地转到位角度误差
+CONFRONT_RELOCALIZE_TURN_TIMEOUT_S = 5.0   # 重定位前原地转超时兜底, 到时仍触发重定位
+CONFRONT_NAV_MAX_LINEAR_SPEED_MPS = 0.35  # 对抗区普通导航最大线速度 (不影响CONFRONT_CLIMB直发爬坡)
+CONFRONT_NAV_MAX_ANGULAR_SPEED_RADPS = 0.30  # 对抗区普通导航最大角速度 (不影响CONFRONT_CLIMB直发爬坡)
 
 # ══════════════════════════════════════════════════════════════════
 #   右半场坐标自动镜像 (在所有左半场常量定义完毕后执行)
@@ -532,13 +595,13 @@ if FIELD_SIDE == 'right':
 
     # ── 武馆 / 组装 / 梅林入口 ──
     WAYPOINT_START              = _mw(WAYPOINT_START)
-    WAYPOINT_WEAPON_RACK        = _mw(WAYPOINT_WEAPON_RACK)
-    WAYPOINT_ASSEMBLY           = _mw(WAYPOINT_ASSEMBLY)
     WAYPOINT_MERLIN_ENTRY       = _mw(WAYPOINT_MERLIN_ENTRY)
 
     # ── 对抗区 ──
     WAYPOINT_MERLIN_EXIT_GATHER = _mw(WAYPOINT_MERLIN_EXIT_GATHER)
     WAYPOINT_EXIT_MERLIN        = _mw(WAYPOINT_EXIT_MERLIN)
+    WAYPOINT_CHONGWU_FINISH     = _mw(WAYPOINT_CHONGWU_FINISH)
+    WAYPOINT_JIUGONG_FINISH     = _mw(WAYPOINT_JIUGONG_FINISH)
     WAYPOINT_CONFRONT_ENTRY     = _mw(WAYPOINT_CONFRONT_ENTRY)
     WAYPOINT_KFS_PLACE          = _mw(WAYPOINT_KFS_PLACE)
     WAYPOINT_CONFRONT_WAIT      = _mw(WAYPOINT_CONFRONT_WAIT)

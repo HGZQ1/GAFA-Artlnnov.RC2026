@@ -11,6 +11,7 @@ full_system.launch.py  (v4.1)
   enable_serial        串口通信 (auto_serial_bridge, 连接STM32)
   field_side           left(默认) / right
   test_area            区域单独测试: full(默认,完整比赛) / weapon(武馆) /
+                       weapon_align(跳过导航直接测武器头夹取) /
                        merlin(梅林) / confront(对抗区)
                        非full时自动: 1) 将 game_controller 启动阶段直接跳到
                        该区域入口对应阶段(跳过前置流程和终端KFS输入);
@@ -29,11 +30,14 @@ full_system.launch.py  (v4.1)
   # 武馆区域测试 (机器人摆放在 WAYPOINT_START)
   ros2 launch rc2026_bringup full_system.launch.py test_area:=weapon enable_serial:=true
 
+  # 武器头夹取状态机测试 (机器人已摆放在 WAYPOINT_WEAPON_RACK)
+  ros2 launch rc2026_bringup full_system.launch.py test_area:=weapon_align enable_serial:=true
+
   # 梅林区域测试 (机器人摆放在 WAYPOINT_MERLIN_ENTRY)
   ros2 launch rc2026_bringup full_system.launch.py test_area:=merlin enable_serial:=true \\
       kfs_real:='5 8' kfs_fake:='2 11' kfs_color:=blue
 
-  # 对抗区区域测试 (机器人摆放在 WAYPOINT_CONFRONT_ENTRY)
+  # 对抗区区域测试 (机器人摆放在 WAYPOINT_EXIT_MERLIN, 即爬坡开始点)
   ros2 launch rc2026_bringup full_system.launch.py test_area:=confront enable_serial:=true
 
   # 右半场同理加 field_side:=right
@@ -63,6 +67,12 @@ WEIGHTS_DIR = os.path.join(
 START_GAME_X   = -1.4
 START_GAME_Y   =  0.4
 START_GAME_YAW =  math.pi / 2.0
+WEAPON_RACK_LEFT_X   = -0.85
+WEAPON_RACK_LEFT_Y   =  0.97
+WEAPON_RACK_LEFT_YAW = -0.087
+WEAPON_RACK_RIGHT_X   = 0.85
+WEAPON_RACK_RIGHT_Y   = 1.25
+WEAPON_RACK_RIGHT_YAW = math.pi
 
 
 def generate_launch_description():
@@ -79,7 +89,7 @@ def generate_launch_description():
         description="场地半场: 'left'(默认) 或 'right'")
     test_area_arg = DeclareLaunchArgument(
         'test_area', default_value='full',
-        description="区域单独测试: full(默认)/weapon/merlin/confront")
+        description="运行区域/模式: full(默认)/weapon/weapon_align/merlin/confront/chongwu/jiugong")
     kfs_real_arg = DeclareLaunchArgument(
         'kfs_real', default_value='5',
         description='区域测试用: 真KFS台阶编号 (空格/逗号分隔)')
@@ -90,35 +100,76 @@ def generate_launch_description():
         'kfs_color', default_value='blue',
         description='区域测试用: KFS颜色 (blue/red)')
 
-    # test_area != full 时默认自动启动比赛状态机
-    use_gc_default = PythonExpression(
-        ["'false' if '", LaunchConfiguration('test_area'), "' == 'full' else 'true'"])
     use_gc_arg = DeclareLaunchArgument(
-        'use_game_controller', default_value=use_gc_default,
-        description='启动比赛状态机')
+        'use_game_controller', default_value='true',
+        description='启动比赛状态机，默认启动以订阅 /game/start_signal')
     enable_serial_arg = DeclareLaunchArgument(
         'enable_serial', default_value='false',
         description='启动串口通信 (连接 STM32)')
+    enable_ir_r1_arg = DeclareLaunchArgument(
+        'enable_ir_r1_signal', default_value='false',
+        description='启动红外学习模块接收R1信号，并发布到 /game/r1_signal')
+    ir_port_arg = DeclareLaunchArgument(
+        'ir_port', default_value='/dev/ttyUSB1',
+        description='红外学习模块USB-TTL串口，建议使用 /dev/serial/by-id/... 固定设备名')
+    ir_baud_arg = DeclareLaunchArgument(
+        'ir_baud', default_value='115200',
+        description='红外学习模块串口波特率')
+    ir_max_score_arg = DeclareLaunchArgument(
+        'ir_max_score', default_value='1.0',
+        description='红外特征序列最大编辑距离，越大越容易识别但更容易误判')
+    ir_min_gap_arg = DeclareLaunchArgument(
+        'ir_min_gap', default_value='1.0',
+        description='红外最佳/次佳特征距离分差，越大越保守')
+    enable_ir_key2_arg = DeclareLaunchArgument(
+        'enable_ir_key2_signal', default_value='false',
+        description='启动第二红外学习模块，专门接收KEY2=进入梅林信号')
+    ir_key2_port_arg = DeclareLaunchArgument(
+        'ir_key2_port', default_value='/dev/ttyUSB2',
+        description='第二红外学习模块USB-TTL串口，默认 /dev/ttyUSB2')
+    ir_key2_baud_arg = DeclareLaunchArgument(
+        'ir_key2_baud', default_value='115200',
+        description='第二红外学习模块串口波特率')
+    ir_key2_preferred_margin_arg = DeclareLaunchArgument(
+        'ir_key2_preferred_margin', default_value='1.0',
+        description='第二红外模块KEY2优先余量，越大越偏向KEY2')
     debug_gui_arg = DeclareLaunchArgument(
         'debug_gui', default_value='false',
         description='调试模式：相机节点显示OpenCV预览窗口')
+    match_timeout_default = PythonExpression([
+        "180.0 if '", LaunchConfiguration('test_area'),
+        "' in ('chongwu', 'jiugong') else 250.0",
+    ])
+    match_timeout_arg = DeclareLaunchArgument(
+        'match_timeout_s', default_value=match_timeout_default,
+        description='比赛/子模式超时停止时间 (s)')
 
     # start_x/y/yaw 默认值随 field_side + test_area 自动切换为对应
-    # 区域入口点的游戏坐标 (full/weapon=WAYPOINT_START, merlin=WAYPOINT_MERLIN_ENTRY,
-    # confront=WAYPOINT_CONFRONT_ENTRY); 可手动覆盖
+    # 区域入口点的游戏坐标 (full/weapon=WAYPOINT_START,
+    # weapon_align=WAYPOINT_WEAPON_RACK, merlin=WAYPOINT_MERLIN_ENTRY,
+    # jiugong/confront=WAYPOINT_EXIT_MERLIN); 可手动覆盖
     start_x_default = PythonExpression([
         f"({START_GAME_X} if '", LaunchConfiguration('field_side'), f"' == 'left' else {-START_GAME_X})"
-        " if '", LaunchConfiguration('test_area'), "' in ('full', 'weapon') else "
+        " if '", LaunchConfiguration('test_area'), "' in ('full', 'weapon', 'chongwu') else "
+        f"({WEAPON_RACK_LEFT_X} if '", LaunchConfiguration('field_side'), f"' == 'left' else {WEAPON_RACK_RIGHT_X})"
+        " if '", LaunchConfiguration('test_area'), "' == 'weapon_align' else "
         "(-3.0 if '", LaunchConfiguration('field_side'), "' == 'left' else 3.0)"
         " if '", LaunchConfiguration('test_area'), "' == 'merlin' else "
+        "(-5.4 if '", LaunchConfiguration('field_side'), "' == 'left' else 5.4)"
+        " if '", LaunchConfiguration('test_area'), "' == 'jiugong' else "
         "(-5.4 if '", LaunchConfiguration('field_side'), "' == 'left' else 5.4)",
     ])
     start_y_default = PythonExpression([
-        f"{START_GAME_Y} if '", LaunchConfiguration('test_area'), "' in ('full', 'weapon') else "
-        "2.0 if '", LaunchConfiguration('test_area'), "' == 'merlin' else 11.6",
+        f"{START_GAME_Y} if '", LaunchConfiguration('test_area'), "' in ('full', 'weapon', 'chongwu') else "
+        f"({WEAPON_RACK_LEFT_Y} if '", LaunchConfiguration('field_side'), f"' == 'left' else {WEAPON_RACK_RIGHT_Y})"
+        " if '", LaunchConfiguration('test_area'), "' == 'weapon_align' else "
+        "2.0 if '", LaunchConfiguration('test_area'), "' == 'merlin' else "
+        "8.4",
     ])
     start_yaw_default = PythonExpression([
-        f"{START_GAME_YAW} if '", LaunchConfiguration('test_area'), "' in ('full', 'weapon', 'merlin') else "
+        f"{START_GAME_YAW} if '", LaunchConfiguration('test_area'), "' in ('full', 'weapon', 'chongwu', 'merlin', 'jiugong', 'confront') else "
+        f"({WEAPON_RACK_LEFT_YAW} if '", LaunchConfiguration('field_side'), f"' == 'left' else {WEAPON_RACK_RIGHT_YAW})"
+        " if '", LaunchConfiguration('test_area'), "' == 'weapon_align' else "
         "(0.0 if '", LaunchConfiguration('field_side'), "' == 'left' else 3.14159265358979)",
     ])
     start_x_arg   = DeclareLaunchArgument('start_x',   default_value=start_x_default)
@@ -195,6 +246,7 @@ def generate_launch_description():
                 'camera_topic': '/camera/camera/color/image_raw',
                 'depth_topic': '/camera/camera/aligned_depth_to_color/image_raw',
                 'camera_info_topic': '/camera/camera/color/camera_info',
+                'raw_target_priority_classes': 'W_punch',
             }],
         )],
     )
@@ -211,12 +263,12 @@ def generate_launch_description():
             name='decision_processor_node',
             output='screen',
             parameters=[{
-                'wheel_diameter_m': 0.10781,
-                'track_width_m': 0.50,
-                'stop_distance_m': 0.20,
-                'align_threshold_deg': 5.0,
-                'pick_duration_s': 10.0,
-                'conf_threshold': 0.5,
+                'wheel_diameter_m': 0.10781,   # 轮子直径 (m)
+                'track_width_m': 0.50,  # 轮距 (m)
+                'stop_distance_m': 0.50,   # 停止距离 (m)
+                'align_threshold_deg': 5.0,  # 对齐阈值 (度)
+                'pick_duration_s': 10.0,    # 拾取持续时间 (s)
+                'conf_threshold': 0.5,     # 置信度阈值
             }],
         )],
     )
@@ -273,18 +325,20 @@ def generate_launch_description():
             'loc_offset_yaw': ParameterValue(LaunchConfiguration('start_yaw'), value_type=float),
             'map_frame': 'map',
             'robot_frame': 'base_link',
-            'max_linear_speed': 1.0,
-            'min_linear_speed': 0.05,
-            'max_angular_speed': 2.0,
-            'kp_linear': 1.2,
-            'kp_angular': 2.0,
-            'decel_distance': 0.30,
-            'xy_tolerance': 0.05,
-            'yaw_tolerance': 0.10,
+            'max_linear_speed': 0.6,  # 原0.25
+            'min_linear_speed': 0.01,
+            'max_angular_speed': 1.0,
+            'kp_linear': 0.50,
+            'kp_angular': 0.40,
+            'decel_distance': 0.80,
+            'max_linear_accel': 0.35,
+            'max_angular_accel': 0.60,
+            'xy_tolerance': 0.12,
+            'yaw_tolerance': 0.15,
             'waypoint_timeout': 30.0,
-            'progress_timeout': 3.0,
-            'visual_servo_timeout': 15.0,
-            'control_rate': 50.0,
+            'progress_timeout': 3.0,    # 进度超时时间 (秒)
+            'visual_servo_timeout': 15.0,   # 视觉伺服超时时间 (秒)
+            'control_rate': 50.0,   # 控制频率 (Hz)
         }],
     )
 
@@ -301,13 +355,48 @@ def generate_launch_description():
                         get_package_share_directory('auto_serial_bridge'),
                         'launch', 'serial_bridge_by_node.launch.py')),
             ),
-            Node(
-                package='cmd_vel_bridge',
-                executable='bridge_node',
-                name='cmd_vel_bridge',
-                output='screen',
-            ),
         ],
+    )
+
+    ir_r1_signal_node = Node(
+        package='decision_processor',
+        executable='ir_key_receiver',
+        name='ir_key_receiver',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('enable_ir_r1_signal')),
+        parameters=[{
+            'module_name': 'main',
+            'port': LaunchConfiguration('ir_port'),
+            'baud': ParameterValue(LaunchConfiguration('ir_baud'), value_type=int),
+            'max_score': ParameterValue(LaunchConfiguration('ir_max_score'), value_type=float),
+            'min_gap': ParameterValue(LaunchConfiguration('ir_min_gap'), value_type=float),
+            # 默认: KEY1=启动按钮, KEY2=进入梅林, KEY3=合体后释放KFS指令
+            'key1_start_value': 1,
+            'key2_signal': 2,
+            'key3_signal': 3,
+        }],
+    )
+
+    ir_key2_signal_node = Node(
+        package='decision_processor',
+        executable='ir_key_receiver',
+        name='ir_key2_receiver',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('enable_ir_key2_signal')),
+        parameters=[{
+            'module_name': 'key2',
+            'port': LaunchConfiguration('ir_key2_port'),
+            'baud': ParameterValue(LaunchConfiguration('ir_key2_baud'), value_type=int),
+            'max_score': ParameterValue(LaunchConfiguration('ir_max_score'), value_type=float),
+            'min_gap': ParameterValue(LaunchConfiguration('ir_min_gap'), value_type=float),
+            'preferred_key': 'KEY2',
+            'preferred_margin': ParameterValue(
+                LaunchConfiguration('ir_key2_preferred_margin'), value_type=float),
+            # 第二红外模块只负责KEY2=进入梅林，避免重复触发启动/释放KFS。
+            'key1_start_value': -1,
+            'key2_signal': 2,
+            'key3_signal': -1,
+        }],
     )
 
     # ══════════════════════════════════════
@@ -363,6 +452,7 @@ def generate_launch_description():
             'kfs_real':  ParameterValue(LaunchConfiguration('kfs_real'),  value_type=str),
             'kfs_fake':  ParameterValue(LaunchConfiguration('kfs_fake'),  value_type=str),
             'kfs_color': ParameterValue(LaunchConfiguration('kfs_color'), value_type=str),
+            'match_timeout_s': ParameterValue(LaunchConfiguration('match_timeout_s'), value_type=float),
         }],
     )
 
@@ -370,7 +460,11 @@ def generate_launch_description():
         model_arg, conf_arg, device_arg,
         field_side_arg,
         test_area_arg, kfs_real_arg, kfs_fake_arg, kfs_color_arg,
-        use_gc_arg, enable_serial_arg, debug_gui_arg,
+        use_gc_arg, enable_serial_arg, debug_gui_arg, match_timeout_arg,
+        enable_ir_r1_arg, ir_port_arg, ir_baud_arg,
+        ir_max_score_arg, ir_min_gap_arg,
+        enable_ir_key2_arg, ir_key2_port_arg, ir_key2_baud_arg,
+        ir_key2_preferred_margin_arg,
         start_x_arg, start_y_arg, start_yaw_arg,
         set_field_side_env,   # 必须在所有节点之前注入环境变量
         # 基础
@@ -395,6 +489,8 @@ def generate_launch_description():
         ),
         # 通信
         serial_stack,
+        ir_r1_signal_node,
+        ir_key2_signal_node,
         # 合体对齐
         dock_align_node,
         # 精对齐 (USB相机)

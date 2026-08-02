@@ -38,10 +38,18 @@
       "Bash(echo \"copied: $?\")",
       "Bash(echo \"synced: $?\")",
       "Bash(chmod +x /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/sync_dp.sh)",
-      "Bash(bash /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/sync_dp.sh)"
+      "Bash(bash /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/sync_dp.sh)",
+      "Bash(bash /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/sync_dp.sh game_controller.py config.py)",
+      "Bash(chmod +x /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/scripts/chassis_test.py)",
+      "Bash(git show *)",
+      "Bash(tmux -V)",
+      "Bash(python3 -c \"import curses; print\\('curses ok'\\)\")",
+      "Bash(xargs -I{} dirname {})",
+      "Bash(xargs -I{} basename {})"
     ],
     "additionalDirectories": [
-      "/home/hgzq"
+      "/home/hgzq",
+      "/tmp"
     ]
   }
 }

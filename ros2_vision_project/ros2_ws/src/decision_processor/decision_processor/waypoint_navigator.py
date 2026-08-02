@@ -2,9 +2,10 @@
 waypoint_navigator.py
 闭环路径点导航器 — 替代 Nav2, 直接 PID 控制全向底盘
 
-两阶段导航:
-  1. PID 闭环导航: 对角线直达目标点 (粗到位, ~5cm)
-  2. 视觉伺服对齐: 自动切入 processor_node 视觉对齐 (精对齐, ~2cm)
+三阶段导航:
+  1. XY 闭环导航: 只控制平移到目标点附近, 不强制转 yaw
+  2. 原地转向: XY 到位后只控制 angular.z 转到目标 yaw
+  3. 视觉伺服对齐: 自动切入 processor_node 视觉对齐 (精对齐, ~2cm)
      可选, 通过 /waypoint_nav/servo_phase 话题激活
 
 话题接口:
@@ -12,6 +13,8 @@ waypoint_navigator.py
   订阅  /waypoint_nav/cancel       String       取消当前导航
   订阅  /waypoint_nav/servo_phase  String       设置视觉伺服阶段名
          (发送 "ALIGN_WEAPON" / "ALIGN_KFS" 激活, 空字符串禁用)
+  订阅  /waypoint_nav/speed_limit  Twist        linear.x=max线速度, angular.z=max角速度; <=0恢复默认
+  订阅  /waypoint_nav/yaw_turn_direction Int8   yaw-only转向方向: 1=逆时针, -1=顺时针, 0=最短路径
   订阅  /decision/state_id         Int8         processor_node 状态反馈
   发布  /cmd_vel                   Twist        底盘速度指令
   发布  /waypoint_nav/status       String       IDLE/NAV/VISUAL_SERVO/ARRIVED/TIMEOUT/STUCK
@@ -65,9 +68,11 @@ class WaypointNavigator(Node):
         self.declare_parameter('max_linear_speed', 1.0)
         self.declare_parameter('min_linear_speed', 0.05)
         self.declare_parameter('max_angular_speed', 2.0)
-        self.declare_parameter('kp_linear', 1.2)
+        self.declare_parameter('kp_linear', 0.4)   #原1.2
         self.declare_parameter('kp_angular', 2.0)
         self.declare_parameter('decel_distance', 0.30)
+        self.declare_parameter('max_linear_accel', 0.40)
+        self.declare_parameter('max_angular_accel', 0.80)
 
         # ── 到达判定 ──
         self.declare_parameter('xy_tolerance', 0.05)
@@ -95,9 +100,13 @@ class WaypointNavigator(Node):
         self._max_lin = self.get_parameter('max_linear_speed').value
         self._min_lin = self.get_parameter('min_linear_speed').value
         self._max_ang = self.get_parameter('max_angular_speed').value
+        self._default_max_lin = self._max_lin
+        self._default_max_ang = self._max_ang
         self._kp_lin = self.get_parameter('kp_linear').value
         self._kp_ang = self.get_parameter('kp_angular').value
         self._decel_dist = self.get_parameter('decel_distance').value
+        self._max_lin_accel = self.get_parameter('max_linear_accel').value
+        self._max_ang_accel = self.get_parameter('max_angular_accel').value
 
         self._xy_tol = self.get_parameter('xy_tolerance').value
         self._yaw_tol = self.get_parameter('yaw_tolerance').value
@@ -122,6 +131,10 @@ class WaypointNavigator(Node):
         self._last_progress_time = 0.0
         self._best_dist = float('inf')
         self._stuck_recovery_count = 0
+        self._last_cmd = Twist()
+        self._yaw_only_latched = False
+        self._yaw_only_logged = False
+        self._yaw_turn_direction = 0
 
         # ── 视觉伺服状态 ──
         self._servo_phase = ''         # 空 = 不使用视觉伺服
@@ -151,6 +164,12 @@ class WaypointNavigator(Node):
         self.create_subscription(
             String, '/waypoint_nav/servo_phase',
             self._on_servo_phase, 10)
+        self.create_subscription(
+            Twist, '/waypoint_nav/speed_limit',
+            self._on_speed_limit, 10)
+        self.create_subscription(
+            Int8, '/waypoint_nav/yaw_turn_direction',
+            self._on_yaw_turn_direction, 10)
         self.create_subscription(
             Int8, '/decision/state_id',
             self._on_decision_state, 10)
@@ -259,6 +278,9 @@ class WaypointNavigator(Node):
             self._best_dist = float('inf')
             self._stuck_recovery_count = 0
             self._decision_state_id = 0
+            self._last_cmd = Twist()
+            self._yaw_only_latched = False
+            self._yaw_only_logged = False
         self.get_logger().info(
             f'Target: ({x:.3f}, {y:.3f}, yaw={math.degrees(yaw):.1f}deg)'
             f'{" + visual_servo=" + self._servo_phase if self._servo_phase else ""}')
@@ -267,6 +289,8 @@ class WaypointNavigator(Node):
         with self._lock:
             self._has_target = False
             self._nav_status = 'IDLE'
+            self._yaw_only_latched = False
+            self._yaw_only_logged = False
         self._publish_stop()
         self._publish_phase('IDLE')
         self.get_logger().info('Navigation cancelled')
@@ -292,8 +316,43 @@ class WaypointNavigator(Node):
         else:
             self.get_logger().info('Visual servo disabled')
 
+    def _on_speed_limit(self, msg: Twist):
+        max_lin = float(msg.linear.x)
+        max_ang = float(msg.angular.z)
+
+        if max_lin <= 0.0 and max_ang <= 0.0:
+            self._max_lin = self._default_max_lin
+            self._max_ang = self._default_max_ang
+            self.get_logger().info(
+                f'Speed limit reset: max_linear={self._max_lin:.2f}m/s, '
+                f'max_angular={self._max_ang:.2f}rad/s')
+            return
+
+        if max_lin > 0.0:
+            self._max_lin = max_lin
+        if max_ang > 0.0:
+            self._max_ang = max_ang
+        self.get_logger().info(
+            f'Speed limit updated: max_linear={self._max_lin:.2f}m/s, '
+            f'max_angular={self._max_ang:.2f}rad/s')
+
+    def _on_yaw_turn_direction(self, msg: Int8):
+        direction = 1 if msg.data > 0 else -1 if msg.data < 0 else 0
+        if direction == self._yaw_turn_direction:
+            return
+        self._yaw_turn_direction = direction
+        label = '逆时针' if direction > 0 else '顺时针' if direction < 0 else '最短路径'
+        self.get_logger().info(f'Yaw-only turn direction set: {label}')
+
     def _on_decision_state(self, msg: Int8):
         self._decision_state_id = msg.data
+
+    def _apply_yaw_turn_direction(self, yaw_error: float) -> float:
+        if self._yaw_turn_direction > 0 and yaw_error < 0.0:
+            return yaw_error + 2.0 * math.pi
+        if self._yaw_turn_direction < 0 and yaw_error > 0.0:
+            return yaw_error - 2.0 * math.pi
+        return yaw_error
 
     # ═══════════════════════════════════
     #   Action Server 回调
@@ -388,23 +447,71 @@ class WaypointNavigator(Node):
         ex = target_x - cur_x
         ey = target_y - cur_y
         dist = math.hypot(ex, ey)
-        e_yaw = _normalize(target_yaw - cur_yaw)
+        e_yaw_short = _normalize(target_yaw - cur_yaw)
+        e_yaw = e_yaw_short
         now = time.time()
 
         # ── 超时检测 ──
         elapsed = now - self._nav_start_time
         tol = self._xy_tol
+        pos_ok = dist <= tol
+        yaw_ok = abs(e_yaw_short) <= self._yaw_tol
+
+        if pos_ok and not self._yaw_only_latched:
+            self._yaw_only_latched = True
+            self._yaw_only_logged = False
+
+        if self._yaw_only_latched:
+            if yaw_ok:
+                self.get_logger().info(
+                    f'PID arrived after yaw-only ({cur_x:.3f}, {cur_y:.3f}), '
+                    f'err: {dist:.3f}m yaw={math.degrees(e_yaw_short):.1f}deg')
+                self._try_enter_visual_servo_or_finish()
+                return
+
+            if elapsed > self._wp_timeout:
+                self.get_logger().warn(
+                    f'Yaw-only timeout! dist={dist:.3f}m '
+                    f'yaw_err={math.degrees(e_yaw_short):.1f}deg')
+                self._finish('TIMEOUT')
+                return
+
+            if not self._yaw_only_logged:
+                direction_label = ''
+                if self._yaw_turn_direction != 0:
+                    direction_label = (
+                        ', forced='
+                        + ('CCW' if self._yaw_turn_direction > 0 else 'CW'))
+                self.get_logger().info(
+                    f'XY reached ({dist:.3f}m), latch yaw-only; '
+                    f'yaw_err={math.degrees(e_yaw_short):.1f}deg'
+                    f'{direction_label}')
+                self._yaw_only_logged = True
+
+            cmd = Twist()
+            self._last_cmd.linear.x = 0.0
+            self._last_cmd.linear.y = 0.0
+            cmd.linear.x = 0.0
+            cmd.linear.y = 0.0
+            e_yaw = self._apply_yaw_turn_direction(e_yaw_short)
+            cmd.angular.z = max(-self._max_ang,
+                                min(self._max_ang, self._kp_ang * e_yaw))
+            self._publish_limited_cmd(cmd)
+            self._last_progress_time = now
+            return
 
         # 路径点超时
         if elapsed > self._wp_timeout:
             relaxed_tol = tol * self._relax_factor
-            if dist <= relaxed_tol:
+            if dist <= relaxed_tol and yaw_ok:
                 self.get_logger().info(
                     f'Timeout but within relaxed tol ({dist:.3f}m) -> trying visual servo')
                 self._try_enter_visual_servo_or_finish()
                 return
             else:
-                self.get_logger().warn(f'Waypoint timeout! dist={dist:.3f}m')
+                self.get_logger().warn(
+                    f'Waypoint timeout! dist={dist:.3f}m '
+                    f'yaw_err={math.degrees(e_yaw):.1f}deg')
                 self._finish('TIMEOUT')
                 return
 
@@ -416,11 +523,13 @@ class WaypointNavigator(Node):
         elif now - self._last_progress_time > self._prog_timeout:
             self._stuck_recovery_count += 1
             if self._stuck_recovery_count >= 3:
-                if dist <= tol * self._relax_factor:
+                if dist <= tol * self._relax_factor and yaw_ok:
                     self.get_logger().info('Stuck but close -> trying visual servo')
                     self._try_enter_visual_servo_or_finish()
                     return
-                self.get_logger().warn(f'Stuck 3x, dist={dist:.3f}m -> STUCK')
+                self.get_logger().warn(
+                    f'Stuck 3x, dist={dist:.3f}m '
+                    f'yaw_err={math.degrees(e_yaw):.1f}deg -> STUCK')
                 self._finish('STUCK')
                 return
             self.get_logger().info(
@@ -430,7 +539,7 @@ class WaypointNavigator(Node):
             self._best_dist = dist
 
         # ── 到达判定 → 进入视觉伺服或直接完成 ──
-        if dist <= tol and abs(e_yaw) <= self._yaw_tol:
+        if pos_ok and yaw_ok:
             self.get_logger().info(
                 f'PID arrived ({cur_x:.3f}, {cur_y:.3f}), '
                 f'err: {dist:.3f}m yaw={math.degrees(e_yaw):.1f}deg')
@@ -453,11 +562,9 @@ class WaypointNavigator(Node):
             sin_yaw = math.sin(cur_yaw)
             cmd.linear.x = vx_world * cos_yaw + vy_world * sin_yaw
             cmd.linear.y = -vx_world * sin_yaw + vy_world * cos_yaw
+            cmd.angular.z = 0.0
 
-        cmd.angular.z = max(-self._max_ang,
-                            min(self._max_ang, self._kp_ang * e_yaw))
-
-        self._cmd_pub.publish(cmd)
+        self._publish_limited_cmd(cmd)
 
     # ─────────────────────────────────
     #   视觉伺服交接
@@ -512,10 +619,33 @@ class WaypointNavigator(Node):
         with self._lock:
             self._nav_status = status
             self._has_target = False
+            self._yaw_only_latched = False
+            self._yaw_only_logged = False
         self._publish_stop()
 
     def _publish_stop(self):
+        self._last_cmd = Twist()
         self._cmd_pub.publish(Twist())
+
+    @staticmethod
+    def _slew(target, current, max_delta):
+        if target > current + max_delta:
+            return current + max_delta
+        if target < current - max_delta:
+            return current - max_delta
+        return target
+
+    def _publish_limited_cmd(self, cmd: Twist):
+        limited = Twist()
+        lin_delta = self._max_lin_accel * self._dt
+        ang_delta = self._max_ang_accel * self._dt
+
+        limited.linear.x = self._slew(cmd.linear.x, self._last_cmd.linear.x, lin_delta)
+        limited.linear.y = self._slew(cmd.linear.y, self._last_cmd.linear.y, lin_delta)
+        limited.angular.z = self._slew(cmd.angular.z, self._last_cmd.angular.z, ang_delta)
+
+        self._last_cmd = limited
+        self._cmd_pub.publish(limited)
 
     def _publish_phase(self, phase):
         msg = String()

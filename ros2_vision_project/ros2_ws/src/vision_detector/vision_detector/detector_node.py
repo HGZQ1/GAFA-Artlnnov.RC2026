@@ -48,6 +48,7 @@ class VisionDetectorNode(Node):
                 ('device', 'cuda'),
                 ('publish_visualization', True),
                 ('depth_sample_points', 24),
+                ('raw_target_priority_classes', 'W_punch'),
                 ('camera_topic', '/camera/color/image_raw'),
                 ('depth_topic', '/camera/depth/image_rect_raw'),
                 ('camera_info_topic', '/camera/color/camera_info'),
@@ -61,6 +62,12 @@ class VisionDetectorNode(Node):
         device            = self.get_parameter('device').value
         self.publish_vis  = self.get_parameter('publish_visualization').value
         self.depth_sample_points = self.get_parameter('depth_sample_points').value
+        priority_text = self.get_parameter('raw_target_priority_classes').value
+        self.raw_target_priority_classes = [
+            item.strip()
+            for item in str(priority_text).replace(',', ' ').split()
+            if item.strip()
+        ]
 
         # 模型路径处理（支持文件名或绝对路径）
         model_path = self._resolve_model_path(model_path)
@@ -106,6 +113,9 @@ class VisionDetectorNode(Node):
             Detection2DArray, '/detections', 10)
         self.raw_target_pub = self.create_publisher(
             PointStamped, '/vision/raw_target', 10)
+        self.get_logger().info(
+            'raw_target priority classes: '
+            + (', '.join(self.raw_target_priority_classes) or '-'))
 
         # ═══ 修复：新增模型名称发布器 ═══
         # 当模型切换时发布新模型名，决策节点据此自动切换场景策略
@@ -346,13 +356,23 @@ class VisionDetectorNode(Node):
         if self.camera_matrix is None:
             return
 
-        best_idx  = max(range(len(detections)),
-                        key=lambda i: detections[i]['confidence'])
+        valid_idxs = [
+            i for i in range(min(len(detections), len(distances)))
+            if distances[i] > 0.0
+        ]
+        if not valid_idxs:
+            return
+
+        priority = set(self.raw_target_priority_classes)
+        priority_idxs = [
+            i for i in valid_idxs
+            if detections[i].get('class_name', '') in priority
+        ]
+        candidates = priority_idxs if priority_idxs else valid_idxs
+
+        best_idx = max(candidates, key=lambda i: detections[i]['confidence'])
         best_det  = detections[best_idx]
         best_dist = distances[best_idx]
-
-        if best_dist <= 0.0:
-            return
 
         x1, y1, x2, y2 = best_det['bbox']
         u = int((x1 + x2) / 2)

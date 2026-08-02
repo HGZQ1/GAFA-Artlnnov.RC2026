@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /home/hgzq/GAFA-Artlnnov.RC2026-main status --short)",
+      "Bash(lsattr /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/docker/Dockerfile.ros2-1.jetson)",
+      "Bash(lsattr /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/docker/)",
+      "Bash(touch /home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/docker/Dockerfile.ros2-1.jetson 2>&1 && echo \"Write OK\" || echo \"Write FAILED\")",
+      "Bash(find /home/hgzq/.config/Code -name \"settings.json\" 2>/dev/null | head -5 && cat /home/hgzq/.config/Code/User/settings.json 2>/dev/null | grep -i \"readonly\\\\|readOnly\\\\|read_only\" || echo \"\\(no readonly settings found\\)\")",
+      "Read(//home/hgzq/.config/Code/**)",
+      "Read(//home/hgzq/.config/Code/User/**)",
+      "Read(//home/hgzq/.claude/**)",
+      "Bash(python3 -m json.tool)",
+      "Bash(xargs cat)",
+      "Bash(ls /home/hgzq/.vscode/extensions/ 2>/dev/null | grep -i \"vim\\\\|vi-mode\\\\|neovim\" || echo \"\\(no vim extensions found\\)\")",
+      "Read(//home/hgzq/.vscode/extensions/**)",
+      "Bash(ros2 --version)",
+      "Read(//opt/ros/**)",
+      "Read(//home/hgzq/FAST_LIO/**)",
+      "Bash(dpkg -l)",
+      "Bash(awk '{print $2}')",
+      "Read(//home/hgzq/**)",
+      "Bash(apt-cache search *)",
+      "Bash(pip3 show *)",
+      "Bash(pip show *)",
+      "Read(//usr/**)",
+      "Bash(sudo apt install -y ros-humble-serial-driver)",
+      "Bash(sudo -n true)",
+      "Bash(pip3 install *)",
+      "Bash(ping -c 1 github.com)",
+      "Bash(python3 -c \"import open3d; print\\('[OK] open3d', open3d.__version__\\)\")"
+    ],
+    "additionalDirectories": [
+      "/home/hgzq/GAFA-Artlnnov.RC2026-main/ros2_vision_project/docker"
+    ]
+  }
+}

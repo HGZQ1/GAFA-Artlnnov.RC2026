@@ -81,6 +81,26 @@ def section(title):
     print(f'\n{clr("▶  " + title, C)}')
 
 
+def kfs_color_for_field_side(field_side):
+    """按比赛半场自动确定己方KFS颜色。"""
+    return 'blue' if field_side == 'left' else 'red'
+
+
+def ask_ir_port(enable_serial, prompt='红外模块串口', default=None):
+    """红外模块串口输入。STM32主串口固定 /dev/ttyUSB0 时避免抢占。"""
+    if default is None:
+        default = '/dev/ttyUSB1' if enable_serial == 'true' else '/dev/ttyUSB0'
+    while True:
+        port = ask(prompt, default=default).strip()
+        if enable_serial == 'true' and port == '/dev/ttyUSB0':
+            print(f'  {clr("⚠ 红外不能和STM32同时使用 /dev/ttyUSB0。", R)}')
+            print(f'  {DIM}请先插STM32让它占用 /dev/ttyUSB0，再插红外模块，通常红外会变成 /dev/ttyUSB1。{N}')
+            choice = ask('重新输入红外串口', ['y', 'n'], 'y')
+            if choice == 'y':
+                continue
+        return port
+
+
 def _start_debug_viewers(proc, usb_video_idx=0):
     """调试模式：在后台自动启动相机预览窗口。"""
     # D435i 彩色图像 (等待3秒让 RealSense 节点就绪)
@@ -155,7 +175,7 @@ def main():
     # ════════════════════════════════════════════════════
     #   0. 选择启动模式
     # ════════════════════════════════════════════════════
-    section('启动模式')
+    section('启动模式喵(=･ω･=)，祝比赛顺利哦喵')
     print(f'  {DIM}competition=比赛模式(自动全场景/状态机/串口)  debug=调试模式(手动选区+相机预览){N}')
     mode = ask('启动模式', ['competition', 'debug'], 'competition')
 
@@ -163,18 +183,50 @@ def main():
     #   比赛模式
     # ════════════════════════════════════════════════════
     if mode == 'competition':
+        section('比赛项目')
+        print(f'  {DIM}full=全程模式  chongwu=崇武探幽(武馆+梅林)  jiugong=九宫藏宝(对抗区){N}')
+        competition_mode = ask('比赛项目', ['full', 'chongwu', 'jiugong'], 'full')
+
         section('半场')
         field_side = ask('场地半场', ['left', 'right'], 'left')
+        kfs_color = kfs_color_for_field_side(field_side)
+        print(f'  {G}KFS 颜色已按半场自动设置: {kfs_color}{N}')
 
-        section('KFS 配置')
-        kfs_color = ask('KFS 颜色', ['blue', 'red'], 'blue')
-        kfs_real  = ask('真 KFS 台阶编号 (空格分隔, 如: 5 8)',  default='5 8')
-        kfs_fake  = ask('假 KFS 台阶编号 (空格分隔, 如: 2 11)', default='2 11')
+        send_kfs_config = competition_mode in ('full', 'chongwu')
+        if send_kfs_config:
+            section('KFS 配置')
+            kfs_real  = ask('真 KFS 台阶编号 (空格分隔, 如: 5)',  default='5')
+            kfs_fake  = ask('假 KFS 台阶编号 (空格分隔, 如: 2 11)', default='2 11')
+        else:
+            kfs_real = ''
+            kfs_fake = ''
+            print(f'  {DIM}九宫藏宝不需要输入KFS配置{N}')
 
-        test_area     = 'full'
+        test_area     = competition_mode
         use_gc        = 'true'
         enable_serial = 'true'
         debug_gui     = 'false'
+        match_timeout = '250.0' if competition_mode == 'full' else '180.0'
+
+        section('红外信号')
+        print(f'  {DIM}KEY1=启动按钮  KEY2=进入梅林  KEY3=合体后释放KFS指令{N}')
+        enable_ir_r1_signal = ask('启用红外学习模块(CH304/USB-TTL)', ['true', 'false'], 'true')
+        if enable_ir_r1_signal == 'true':
+            ir_port = ask_ir_port(enable_serial)
+            ir_baud = ask('红外模块波特率', default='115200')
+        else:
+            ir_port = ''
+            ir_baud = '115200'
+        enable_ir_key2_signal = ask('启用第二红外KEY2模块(/dev/ttyUSB2)', ['true', 'false'], 'true')
+        if enable_ir_key2_signal == 'true':
+            ir_key2_port = ask_ir_port(
+                enable_serial,
+                prompt='第二红外KEY2模块串口',
+                default='/dev/ttyUSB2')
+            ir_key2_baud = ask('第二红外KEY2模块波特率', default='115200')
+        else:
+            ir_key2_port = ''
+            ir_key2_baud = '115200'
 
     # ════════════════════════════════════════════════════
     #   调试模式
@@ -182,14 +234,15 @@ def main():
     else:
         section('半场')
         field_side = ask('场地半场', ['left', 'right'], 'left')
+        kfs_color = kfs_color_for_field_side(field_side)
+        print(f'  {G}KFS 颜色已按半场自动设置: {kfs_color}{N}')
 
         section('测试区域')
-        print(f'  {DIM}full=完整比赛  weapon=武馆  merlin=梅林  confront=对抗区{N}')
-        test_area = ask('测试区域', ['full', 'weapon', 'merlin', 'confront'], 'full')
+        print(f'  {DIM}full=完整比赛  weapon=武馆  weapon_align=武器头夹取  merlin=梅林  confront=对抗区{N}')
+        test_area = ask('测试区域', ['full', 'weapon', 'weapon_align', 'merlin', 'confront'], 'full')
 
         section('KFS 配置')
-        kfs_color = ask('KFS 颜色', ['blue', 'red'], 'blue')
-        kfs_real  = ask('真 KFS 台阶编号 (空格分隔, 如: 5 8)',  default='5 8')
+        kfs_real  = ask('真 KFS 台阶编号 (空格分隔, 如: 5)',  default='5')
         kfs_fake  = ask('假 KFS 台阶编号 (空格分隔, 如: 2 11)', default='2 11')
 
         section('功能开关')
@@ -199,6 +252,28 @@ def main():
         use_gc        = ask('启动比赛状态机 (game_controller)', ['true', 'false'], gc_default)
         enable_serial = ask('启动串口通信 (连接 STM32)',          ['true', 'false'], serial_default)
         debug_gui     = 'true'
+        match_timeout = '250.0'
+        send_kfs_config = True
+
+        section('红外信号')
+        print(f'  {DIM}KEY1=启动按钮  KEY2=进入梅林  KEY3=合体后释放KFS指令{N}')
+        enable_ir_r1_signal = ask('启用红外学习模块(CH304/USB-TTL)', ['true', 'false'], 'false')
+        if enable_ir_r1_signal == 'true':
+            ir_port = ask_ir_port(enable_serial)
+            ir_baud = ask('红外模块波特率', default='115200')
+        else:
+            ir_port = ''
+            ir_baud = '115200'
+        enable_ir_key2_signal = ask('启用第二红外KEY2模块(/dev/ttyUSB2)', ['true', 'false'], 'false')
+        if enable_ir_key2_signal == 'true':
+            ir_key2_port = ask_ir_port(
+                enable_serial,
+                prompt='第二红外KEY2模块串口',
+                default='/dev/ttyUSB2')
+            ir_key2_baud = ask('第二红外KEY2模块波特率', default='115200')
+        else:
+            ir_key2_port = ''
+            ir_key2_baud = '115200'
 
     # ════════════════════════════════════════════════════
     #   组装参数
@@ -207,12 +282,23 @@ def main():
         ('field_side',          field_side),
         ('test_area',           test_area),
         ('kfs_color',           kfs_color),
-        ('kfs_real',            kfs_real),
-        ('kfs_fake',            kfs_fake),
         ('use_game_controller', use_gc),
         ('enable_serial',       enable_serial),
+        ('enable_ir_r1_signal', enable_ir_r1_signal),
+        ('enable_ir_key2_signal', enable_ir_key2_signal),
         ('debug_gui',           debug_gui),
+        ('match_timeout_s',      match_timeout),
     ]
+    if enable_ir_r1_signal == 'true':
+        params.append(('ir_port', ir_port))
+        params.append(('ir_baud', ir_baud))
+    if enable_ir_key2_signal == 'true':
+        params.append(('ir_key2_port', ir_key2_port))
+        params.append(('ir_key2_baud', ir_key2_baud))
+
+    if send_kfs_config:
+        params.insert(3, ('kfs_real', kfs_real))
+        params.insert(4, ('kfs_fake', kfs_fake))
 
     # ════════════════════════════════════════════════════
     #   预览
@@ -227,17 +313,28 @@ def main():
     print(f'{G}└────────────────────────────────────────────────────┘{N}')
 
     serial_clr = G if enable_serial == 'true' else DIM
+    ir_clr     = G if enable_ir_r1_signal == 'true' else DIM
+    ir2_clr    = G if enable_ir_key2_signal == 'true' else DIM
     gc_clr     = G if use_gc        == 'true' else DIM
     extra = f'  {clr("相机预览已开启", C)}' if debug_gui == 'true' else ''
     print(
         f'\n  半场 {clr(field_side.upper(), Y)}  '
         f'区域 {clr(test_area, Y)}  '
         f'颜色 {clr(kfs_color, Y)}  '
-        f'真={clr(kfs_real, G)}  假={clr(kfs_fake, R)}\n'
+        f'真={clr(kfs_real or "-", G)}  假={clr(kfs_fake or "-", R)}\n'
         f'  状态机 {clr(use_gc, gc_clr)}  '
-        f'串口 {clr(enable_serial, serial_clr)}'
+        f'串口 {clr(enable_serial, serial_clr)}  '
+        f'红外 {clr(enable_ir_r1_signal, ir_clr)}  '
+        f'红外2(KEY2) {clr(enable_ir_key2_signal, ir2_clr)}  '
+        f'限时 {clr(match_timeout + "s", Y)}'
         f'{extra}'
     )
+    if enable_ir_r1_signal == 'true':
+        print(f'  红外串口 {clr(ir_port, Y)}  波特率 {clr(ir_baud, Y)}')
+    if enable_ir_key2_signal == 'true':
+        print(
+            f'  第二红外KEY2串口 {clr(ir_key2_port, Y)}  '
+            f'波特率 {clr(ir_key2_baud, Y)}  KEY2优先')
 
     if debug_gui == 'true':
         print(f'\n  {DIM}调试模式将自动启动:'
@@ -266,7 +363,12 @@ def main():
 
     proc = subprocess.Popen(argv, env=os.environ.copy())
 
-    threading.Thread(target=_send_kfs, args=(proc, kfs_topic_msg), daemon=True).start()
+    if send_kfs_config:
+        threading.Thread(target=_send_kfs, args=(proc, kfs_topic_msg), daemon=True).start()
+    else:
+        print(f'\n{Y}[RC2026] 等待启动信号 — 按下机器人物理启动按钮{N}')
+        print(f'{DIM}         或手动: ros2 topic pub --once /game/start_signal '
+              f'std_msgs/msg/UInt8 \'{{data: 1}}\'{N}')
 
     if debug_gui == 'true':
         threading.Thread(target=_start_debug_viewers, args=(proc, 0), daemon=True).start()

@@ -51,6 +51,8 @@ class MapRelocalizer(Node):
         self.declare_parameter('icp_max_dist',     0.5)     # ICP 最大对应点距离 (m)
         self.declare_parameter('icp_min_fitness',  0.05)    # 低于此值视为匹配失败
         self.declare_parameter('voxel_size',       0.1)     # 降采样体素大小 (m)
+        self.declare_parameter('max_correction_xy', 1.0)    # 超过此平移修正量视为误匹配 (m)
+        self.declare_parameter('max_correction_yaw_deg', 30.0)  # 超过此角度修正量视为误匹配
 
         self._map_file  = self.get_parameter('map_file').value
         self._off_x     = self.get_parameter('prior_offset_x').value
@@ -60,6 +62,9 @@ class MapRelocalizer(Node):
         self._icp_dist  = self.get_parameter('icp_max_dist').value
         self._icp_fit   = self.get_parameter('icp_min_fitness').value
         self._voxel     = self.get_parameter('voxel_size').value
+        self._max_corr_xy = self.get_parameter('max_correction_xy').value
+        self._max_corr_yaw = math.radians(
+            self.get_parameter('max_correction_yaw_deg').value)
 
         if not self._map_file:
             self.get_logger().error('map_file 参数为空, 退出')
@@ -162,38 +167,45 @@ class MapRelocalizer(Node):
         self.get_logger().info(
             f'[{label}] ICP 开始: scan={len(scan.points)} pt | map={len(self._map.points)} pt')
 
+        init_T = _transform_from_xyyaw(self._off_x, self._off_y, self._off_yaw)
         result = o3d.pipelines.registration.registration_icp(
             scan, self._map,
             max_correspondence_distance=self._icp_dist,
-            init=np.eye(4),
+            init=init_T,
             estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPlane(),
             criteria=o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=100),
         )
 
         T   = result.transformation
-        dx  = T[0, 3]   # FAST-LIO 当前坐标系原点在 MAP 坐标系中的 x 偏移
-        dy  = T[1, 3]   # FAST-LIO 当前坐标系原点在 MAP 坐标系中的 y 偏移
-        dyaw = math.atan2(T[1, 0], T[0, 0])
+        new_x = T[0, 3]
+        new_y = T[1, 3]
+        new_yaw = math.atan2(T[1, 0], T[0, 0])
+
+        delta_T = np.linalg.inv(init_T) @ T
+        corr_x = delta_T[0, 3]
+        corr_y = delta_T[1, 3]
+        corr_xy = math.hypot(corr_x, corr_y)
+        corr_yaw = _normalize(new_yaw - self._off_yaw)
 
         self.get_logger().info(
             f'[{label}] ICP: fitness={result.fitness:.4f}  RMSE={result.inlier_rmse:.4f}m  '
-            f'offset=({dx:+.3f}, {dy:+.3f}, {math.degrees(dyaw):+.1f}°)')
+            f'pose=({new_x:+.3f}, {new_y:+.3f}, {math.degrees(new_yaw):+.1f}°)  '
+            f'corr=({corr_x:+.3f}, {corr_y:+.3f}, {math.degrees(corr_yaw):+.1f}°)')
 
         ok = result.fitness >= self._icp_fit
         if not ok:
             self.get_logger().warn(
                 f'[{label}] ICP fitness={result.fitness:.4f} < 阈值 {self._icp_fit}, '
                 f'使用先验偏移量 (不校正)')
-            dx = dy = dyaw = 0.0
-
-        # ── 将 MAP 帧偏移转换为游戏坐标修正 ──────────────────
-        # prior_offset_x/y/yaw 始终保持启动时的常量 (FAST-LIO坐标系原点=游戏坐标),
-        # 每轮独立地用该常量 + 本轮ICP结果, 重新算出当前应使用的 loc_offset,
-        # 从而吸收掉本轮重定位之前积累的 SLAM 漂移
-        c, s = math.cos(self._off_yaw), math.sin(self._off_yaw)
-        new_x   = self._off_x   + c * dx - s * dy
-        new_y   = self._off_y   + s * dx + c * dy
-        new_yaw = self._off_yaw + dyaw
+            new_x, new_y, new_yaw = self._off_x, self._off_y, self._off_yaw
+        elif corr_xy > self._max_corr_xy or abs(corr_yaw) > self._max_corr_yaw:
+            self.get_logger().warn(
+                f'[{label}] ICP 修正量过大, 疑似误匹配: '
+                f'xy={corr_xy:.3f}m > {self._max_corr_xy:.3f}m 或 '
+                f'yaw={math.degrees(corr_yaw):.1f}° > '
+                f'{math.degrees(self._max_corr_yaw):.1f}°, 使用先验偏移量')
+            ok = False
+            new_x, new_y, new_yaw = self._off_x, self._off_y, self._off_yaw
 
         status = '✓ 校正成功' if ok else '⚠ 使用先验'
         self.get_logger().info(
@@ -202,7 +214,7 @@ class MapRelocalizer(Node):
             f'(耗时 {time.time()-self._t_start:.1f}s)')
 
         self._update_nav_params(new_x, new_y, new_yaw)
-        self._publish_initialpose(dx, dy, dyaw)
+        self._publish_initialpose(new_x, new_y, new_yaw)
 
         status_msg = String()
         status_msg.data = f'{label}:{"ok" if ok else "fallback"}'
@@ -246,15 +258,35 @@ class MapRelocalizer(Node):
     #   发布 initialpose (供 RViz 可视化)
     # ─────────────────────────────────────────────────────────
 
-    def _publish_initialpose(self, dx: float, dy: float, dyaw: float):
+    def _publish_initialpose(self, x: float, y: float, yaw: float):
         msg = PoseWithCovarianceStamped()
         msg.header.frame_id = 'map'
         msg.header.stamp    = self.get_clock().now().to_msg()
-        msg.pose.pose.position.x    = dx
-        msg.pose.pose.position.y    = dy
-        msg.pose.pose.orientation.z = math.sin(dyaw / 2.0)
-        msg.pose.pose.orientation.w = math.cos(dyaw / 2.0)
+        msg.pose.pose.position.x    = x
+        msg.pose.pose.position.y    = y
+        msg.pose.pose.orientation.z = math.sin(yaw / 2.0)
+        msg.pose.pose.orientation.w = math.cos(yaw / 2.0)
         self._pose_pub.publish(msg)
+
+
+def _transform_from_xyyaw(x: float, y: float, yaw: float):
+    c, s = math.cos(yaw), math.sin(yaw)
+    T = np.eye(4)
+    T[0, 0] = c
+    T[0, 1] = -s
+    T[1, 0] = s
+    T[1, 1] = c
+    T[0, 3] = x
+    T[1, 3] = y
+    return T
+
+
+def _normalize(angle: float):
+    while angle > math.pi:
+        angle -= 2.0 * math.pi
+    while angle < -math.pi:
+        angle += 2.0 * math.pi
+    return angle
 
 
 def main(args=None):
