@@ -1,0 +1,3 @@
+[submodule "ros2_vision_project/sim_ws/src/rc2026_field"]
+	path = ros2_vision_project/sim_ws/src/rc2026_field
+	url = https://github.com/ConQU2026/rc2026_field.git
