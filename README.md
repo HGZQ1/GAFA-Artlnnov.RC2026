@@ -172,8 +172,8 @@ scripts/launch_rc2026.py
 ![时序图](/ros2_vision_project/GAFA-Artlnnov.RC2026-main_2026-08-03T11_17_24.474Z.png)
 
 ## 八、完整的TF树✨️
-![TF树](/ros2_vision_project/frames_2026-06-14_17.52.22.pdf)
-
+![TF树](/ros2_vision_project/Screenshot%20from%202026-08-04%2018-03-35.png) 
+map -> odom -> base_link 
 ## 九、Git克隆项目和运行✨️
 系统：Ubuntu 22.04 LTS (不会装ubuntu的自己看[这个](ros2_vision_project/视觉组教程/)，或者自己退队吧，我已经不想再帮任何人装系统了，这一年给我装燃尽了)
 
