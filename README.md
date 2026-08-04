@@ -1,17 +1,17 @@
-# RC2026武林探秘 R2全自动机器人上位机系统
+# RC2026武林探秘 R2全自动机器人上位机系统🤖
 
-## 本项目由广州美术学院湾区创新学院Artlnnov战队算法组开源和维护 
+## 本项目由广州美术学院湾区创新学院Artlnnov战队算法组开源和维护
 
-  - **项目负责人**：刘卓轩（联系方式：18927743799/📫：HGZQ2108299415@outlook.com，不许闲的没事打电话给我）
+  - **项目负责人**：刘卓轩（联系方式：18927743799/📫：HGZQ2108299415@outlook.com，不许闲的没事打电话给我）【R2唯一上位机】
   - **副组长**：李嘉禾
 
-## 一、项目概览
+## 一、项目概览✨️
 
-本项目为Artlnnov战队参加 Robocon 2026 比赛 R2 机器人的上位机系统，基于 ROS2 Humble 构建，运行在 AMD Ryzen 7 8845HS 小主机上。主要覆盖YOLO视觉处理、SLAM、导航、决策模块、全流程状态机、底盘与机械臂移动和动作、Gazebo仿真，以及与下位机之间的串口通信。 
+本项目为**Artlnnov战队**参加 Robocon 2026 比赛 R2 机器人的上位机系统，基于 ROS2 Humble 构建，运行在 AMD Ryzen 7 8845HS 小主机上。主要覆盖YOLO视觉处理、SLAM、导航、决策模块、全流程状态机、底盘与机械臂移动和动作、Gazebo仿真，以及与下位机之间的串口通信。
 
-> 该系统串口通信包使用**重庆大学开源的AutoSerialBridge项目**，仅修改protocol.yaml部分；以及仿真模型环境使用**重庆大学开源的RC2026 Gazebo Classic 仿真场地功能包**，已保留相应许可证，感谢开源作者的贡献。
+> 该系统串口通信包使用**重庆大学开源的AutoSerialBridge项目**，仅修改protocol.yaml部分；以及仿真模型环境使用**重庆大学开源的RC2026 Gazebo Classic 仿真场地功能包**，已保留相应许可证，地图右半场点云由**华南理工大学robotic战队**提供，十分感谢开源作者的贡献。🙏🙏🙏
 
-相应的开源仓库地址如下：https://github.com/ConQU2026/rc2026_field.git 
+相应的开源仓库地址如下：https://github.com/ConQU2026/rc2026_field.git
 
 https://github.com/ConQU2026/auto_serial_bridge.git
 
@@ -24,32 +24,33 @@ https://github.com/ConQU2026/auto_serial_bridge.git
   - 识别梅林区域内的真KFS，完成拾取；
   - 通过爬升和下降以及路径规划通过梅林台阶；
 - 对抗区域：
-  - 完成上坡进入对抗区域； 
+  - 完成上坡进入对抗区域；
   - 移动到九宫格前，并放置KFS至九宫格第二层；
   - 到达合体区域与R1进行合体，并将KFS放置在九宫格最高层；
 ---
 系统分为两个独立工作空间：`ros2_vision_project/ros2_ws` 为真机工作空间（实际运行环境，实际部署的部分），`ros2_vision_project/sim_ws` 为仿真工作空间。系统主入口为 `ros2_vision_project/scripts/launch_rc2026.py`，可交互式启动各个功能模块。
 
 
-## 二、目录结构
+## 二、目录结构✨️
 
-```text 
+```text
 GAFA-Artlnnov.RC2026/
      |-- README.md  # 项目说明文档
      |-- ros2_vision_project/ # ROS2上位机系统（详细看内置文档）
      └── 模型训练project/  # 模型训练项目
 ```
 
-## 三、硬件使用 
+## 三、硬件使用✨️
 
 | 硬件设备 | 用途 |
 | --- | --- |
 | Intel RealSense D435i | RGB-D 图像、武器头/KFS对齐、IMU 数据输入、R1R2合体检测ArUco |
 | Livox Mid-360S | 点云输入、激光惯性里程计、预建点云地图定位 |
 |外接USB相机| KFS精对齐|
+|红外学习模块| R1R2通信|
 | AMD Ryzen 7 8845HS 小主机 | 真机实际部署平台 |
 
-## 四、技术栈
+## 四、技术栈✨️
 
 | 层级 | 技术/工具 | 用途 |
 | --- | --- | --- |
@@ -67,7 +68,7 @@ GAFA-Artlnnov.RC2026/
 | 下位机通信 | AutoSerialBridge、UART、CRC8 协议 | 与 STM32 交换底盘速度、动作组、反馈、启动/R1 信号 |
 | 仿真 | Gazebo Classic、rc2026_field、rc2026_sim | 场地/KFS/机器人仿真、重定位与里程计漂移测试 |
 
-## 五、核心算法模块（ros2_ws）
+## 五、核心算法模块（ros2_ws）✨️
 
 | 类别 | 核心文件/模块 | 算法或机制 | 用途 |
 | --- | --- | --- | --- |
@@ -115,7 +116,7 @@ GAFA-Artlnnov.RC2026/
 - **KFS 三棱精对齐算法**：基于 OpenCV 色彩分割、边缘和棱线检测，计算透视误差与横向居中误差。
 - **比赛总控有限状态机**：编排武馆、梅林、对抗区、KFS 放置、R1 合体和超时保护等比赛阶段。
 
-## 六、系统架构链路
+## 六、系统架构链路✨️
 
 推荐启动链路：
 
@@ -167,76 +168,81 @@ scripts/launch_rc2026.py
 
 核心流程可以概括为：交互脚本收集比赛参数，`GameController` 负责全流程状态机，`WaypointNavigator` 负责全局路径点移动，`processor_node`、`fine_align_node` 和 `dock_align_node` 负责不同阶段的视觉伺服，最终所有底盘/动作指令通过串口桥发送给 STM32 执行。
 
-## 七、系统时序 
+## 七、系统时序✨️
 ![时序图](/ros2_vision_project/GAFA-Artlnnov.RC2026-main_2026-08-03T11_17_24.474Z.png)
 
-## 八、完整的TF树
+## 八、完整的TF树✨️
 ![TF树](/ros2_vision_project/frames_2026-06-14_17.52.22.pdf)
 
-## 九、Git克隆项目和运行 
-系统：Ubuntu 22.04 LTS 
+## 九、Git克隆项目和运行✨️
+系统：Ubuntu 22.04 LTS (不会装ubuntu的自己看[这个](ros2_vision_project/视觉组教程/)，或者自己退队吧，我已经不想再帮任何人装系统了，这一年给我装燃尽了)
 
 请确保已安装 **ROS2 Humble**、**Python3.10（这个自带的）**、**C++编译器** 。
 
-或者直接使用本项目提供的 Docker 镜像运行，配置教程见 [配置指南](/ros2_vision_project/docker/docker配置指南.md)。个人建议如果是新手，直接使用 Docker 镜像运行，避免环境配置问题。 
+或者直接使用本项目提供的 Docker 镜像运行，配置教程见 [配置指南](/ros2_vision_project/docker/docker配置指南.md)。个人建议如果是新手，直接使用 Docker 镜像运行，避免环境配置问题。
 
-### 接线 
+### 接线
 1. 我这里**红外学习模块**和**下位机UART通信**均用的CH340 USB转TTL模块，红外学习模块接收端的TXD接CH340的RXD，RXD接CH340的TXD，GND接GND，**VCC接VCC**。下位机UART通信的TXD接CH340的RXD，RXD接CH340的TXD，GND接GND，**VCC不接**。
-2. 先接上UART通信模块，到USB主机口，再接两个红外学习模块[***因为我默认UART通信占的USB0口，红外学习模块分别占USB1,2口***]。
+2. 先接上UART通信模块，到USB主机口，再接两个红外学习模块[***因为我为了方便管理这几个接CH340的东西于是默认UART通信占的USB0口，红外学习模块分别占USB1,2口***]。
 3. 然后接上USB相机，深度相机和激光雷达，雷达接LAN口，供电接下位机（这步无先后之分）。
 
 ### 安装上位机系统和启动
 ```bash
-# 1. 加载 ROS 2 Humble
+# 1. 加载 ROS2 Humble
 source /opt/ros/humble/setup.bash
 
 # 2. 从GitHub克隆项目到本地
-cd "$HOME"
+cd "$HOME"  #或者自己喜欢放哪就cd到哪
 git clone https://github.com/GAFA-Artlnnov/GAFA-Artlnnov.RC2026-main.git
 
 
 # 3. 安装依赖
-cd "$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project" && bash docker/install_host_deps.sh 
+cd "$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project" && bash docker/install_host_deps.sh
 
 #注意：Librealsense SDK驱动、MID-360S雷达驱动、livox_ros_driver2、fast_lio2需要自行下载安装和配置(放到后面了，解压即可)
 
 # 4. 启动系统
 cd "$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws"
-colcon build --symlink-install  #构建全部 
+colcon build --symlink-install  #构建全部
 #如果构建失败就单独构建失败的包，如果是串口通信包构建失败则阅读根据串口通信包的README.md进行构建
 
 cd "$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project"
 source ros2_ws/install/setup.bash
-python3 scripts/launch_rc2026.py  #启动系统交互程序 
+python3 scripts/launch_rc2026.py  #启动系统交互程序
 
-# 5.启动底盘运动（另开一个终端执行，如果没有遥控器的话） 
-ros2 topic pub --once /game/start_signal std_msgs/msg/UInt8 '{data: 1}' 
+# 5.启动底盘运动（另开一个终端执行，如果没有遥控器的话）
+ros2 topic pub --once /game/start_signal std_msgs/msg/UInt8 '{data: 1}'
 
 ``` 
+Librealsense SDK：https://github.com/realsenseai/librealsense/blob/master/doc/installation.md 
+
+MID-360S雷达驱动、livox_ros_driver2、fast_lio2：[MID-360S的开发资料.zip](ros2_vision_project/MID-360S的开发资料.zip) 
+
+
 **常见问题**：
 | 问题 | 解决方案 |
 | --- | --- |
 构建失败，提示找不到某些依赖包 | 先看看该包是否存在，或者检查当下路径是否是在正确的目录（ros2_vision_project/ros2_ws）下 |
 |构建失败，某个包单独构建失败|重新单独构建该包，colcon build --symlink-install --packages-select vision_detector vision_detector /colcon build --symlink-install --packages-select decision_processor decision_processor /colcon build --symlink-install --packages-select vision_msgs_custom vision_msgs_custom|
 |构建失败，提示串口通信包构建失败|请阅读串口通信包的README.md，按照里面的步骤进行构建|
-|构建失败，提示构建decision_processor时环境错误|```export AMENT_PREFIX_PATH=$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/install/decision_processor:$AMENT_PREFIX_PATH && export PYTHONPATH=$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/install/decision_processor/lib/python3.10/site-packages:$PYTHONPATH``` 
+|构建失败，提示构建decision_processor时环境错误|```export AMENT_PREFIX_PATH=$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/install/decision_processor:$AMENT_PREFIX_PATH && export PYTHONPATH=$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/install/decision_processor/lib/python3.10/site-packages:$PYTHONPATH```
 |如果是在docker中运行，构建失败，原因跟上面一样|```export AMENT_PREFIX_PATH=/ros2_vision_project/ros2_ws/install_docker/decision_processor:$AMENT_PREFIX_PATH  && export PYTHONPATH=/ros2_vision_project/ros2_ws/install_docker/decision_processor/lib/python3.10/site-packages:$PYTHONPATH```|
 |有时colonel build会报错|可能是因为之前的构建文件残留导致的，可以尝试清理构建文件后重新构建：```rm -rf build/ install/ log/```|
 |缺少依赖|直接把报错扔给AI就知道缺什么了|
 ### 注意：用docker运行的话，需要修改以下路径：
 
-1. full_system.launch.py中找到WEIGHTS_DIR直接修改为：WEIGHTS_DIR = ‘/ros2_vision_project/ros2_ws/src/vision_detector/weights‘ 
-2.  ros2_ws/src/vision_detector/vision_detector/model_switcher.py中找到WEIGHTS_DIR直接修改为：WEIGHTS_DIR = ‘/ros2_vision_project/ros2_ws/src/vision_detector/weights‘ 
+1. full_system.launch.py中找到WEIGHTS_DIR直接修改为：WEIGHTS_DIR = ‘/ros2_vision_project/ros2_ws/src/vision_detector/weights‘
+2.  ros2_ws/src/vision_detector/vision_detector/model_switcher.py中找到WEIGHTS_DIR直接修改为：WEIGHTS_DIR = ‘/ros2_vision_project/ros2_ws/src/vision_detector/weights‘
 
-### 一些可能要用的命令 
+### 一些可能要用的命令
 ```bash
 # 查看检测视觉结果
 source install/setup.bash
 ros2 run rqt_image_view rqt_image_view #查看相机图像，可在界面选择查看color/image_raw、depth/image_rect_raw、detector/image_raw等图像
-ros2 topic echo /detections #查看检测结果 
+ros2 topic echo /detections #查看检测结果
 
-# 手动模型切换： 
-ros2 run vision_detector model_switcher  
+# 手动模型切换：
+ros2 run vision_detector model_switcher
 #按回车，然后输入模型名字如yolov8n,best,回车确认切换（默认best.pt）切换不了可能是模型损坏或者路径错误，检查模型文件是否存在，路径是否正确，模型文件是否完整。
 
 # 决策状态
@@ -246,26 +252,26 @@ ros2 topic echo /decision/state
 ros2 topic echo /serial/chassis_cmd
 
 # 视觉帧率
-ros2 topic hz   /vision/raw_target 
+ros2 topic hz   /vision/raw_target
 #==================================================================================================================
 
-#ssh连接主机测试（一般调车用）  
+#ssh连接主机测试（一般调车用）
 ssh hgzq123@192.XXX.XX.X  #后面是主机IP,用ifconfig查看当前ip地址)
 docker exec -it <docker的容器名> bash  #进入容器（用docker才需要）
 cd /ros2_vision_project/ros2_ws
-source install/setup.bash  
+source install/setup.bash
 #===================================================================================================================
 
 #建图：
 #终端 1 — 启动 Livox Mid-360S 雷达驱动：
 source /opt/ros/humble/setup.bash
 source ~/livox_ros_driver2/install/setup.bash
-ros2 launch livox_ros_driver2 msg_MID360s_launch.py 
+ros2 launch livox_ros_driver2 msg_MID360s_launch.py
 
 #终端 2 — 启动 FAST-LIO：
 source /opt/ros/humble/setup.bash
 source ~/FAST_LIO/install/setup.bash
-ros2 launch fast_lio mapping.launch.py config_file:=mid360.yaml 
+ros2 launch fast_lio mapping.launch.py config_file:=mid360.yaml
 
 #终端 3 — RViz 查看实时建图：
 rviz2
@@ -277,24 +283,24 @@ rviz2
 source /opt/ros/humble/setup.bash
 python3 ~/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/src/rc2026_navigation/scripts/save_cloud_map.py \
     --duration 60 \
-    --output ~/FAST_LIO/PCD/scans.pcd 
+    --output ~/FAST_LIO/PCD/scans.pcd
 
 
 #===================================================================================================================
 
 #仿真：
 #终端 1 — 启动仿真包：
-cd ~/GAFA-Artlnnov.RC2026-main/ros2_vision_project/sim_ws 
+cd ~/GAFA-Artlnnov.RC2026-main/ros2_vision_project/sim_ws
 source install/setup.bash
-ros2 launch rc2026_sim simulation.launch.py use_game_controller:=true 
+ros2 launch rc2026_sim simulation.launch.py use_game_controller:=true
 #右半场：
 ros2 launch rc2026_sim simulation.launch.py field_side:=right use_game_controller:=true
 
 #终端 2 — 自定义真假kfs标签：
-ros2 topic pub --once /game/kfs_input std_msgs/String "data: 'real:3,8 fake:1,6'" 
+ros2 topic pub --once /game/kfs_input std_msgs/String "data: 'real:3,8 fake:1,6'"
 
 #终端 3 — 开始启动：
-ros2 topic pub --once /game/start_signal std_msgs/msg/UInt8 '{data: 1}' 
+ros2 topic pub --once /game/start_signal std_msgs/msg/UInt8 '{data: 1}'
 
 
 #===================================================================================================================
@@ -312,7 +318,20 @@ ros2 topic pub --once /game/r1_signal std_msgs/msg/UInt8 '{data: 2}'
 
 # 4. R1 合体指令（模拟R1通知R2可以合体）
 #    game_controller 在 WAIT_MERGE 阶段等这个
-ros2 topic pub --once /game/r1_signal std_msgs/msg/UInt8 '{data: 3}'   
+ros2 topic pub --once /game/r1_signal std_msgs/msg/UInt8 '{data: 3}'
 
-``` 
-## 十、
+```
+
+## 十、许可✨️
+
+本项目自研部分采用 MIT License 开源，详见 [LICENSE](./LICENSE)。
+
+项目中的第三方组件保留各自原始许可证声明，使用、修改和分发时请同时遵守对应子项目的许可条款。
+
+--- 
+
+2026是我参加RC的第一年，很高兴在这个学校有志同道合的同学跟我一起完成这个比赛，同时也取到了不错的成绩，今年是我们从0到1的开始，很感谢其他学校在这一年给我们给予的帮助和指导，希望在更往后的未来我们的后继团队有机会拿到更好的成绩，如果可以...我还想打RM喵~ 
+
+呜呜呜，写的代码太💩了，大佬们轻点喷，如果可以，请给我提issues，我会很感激的，谢谢喵~
+
+**致Artlnnov：同心笃行，百挫弥坚；虽千万人，吾往矣🚀**
