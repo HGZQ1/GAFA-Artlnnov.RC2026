@@ -20,6 +20,9 @@ __pycache__/
 test*.jpg
 *.png
 
+# 本地大体积资料包，不提交到 GitHub
+MID-360S的开发资料.zip
+
 # Claude 配置（本地专用）
 .claude/
 

@@ -106,13 +106,6 @@ RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-key F6E65AC044F831AC80A0
 # 升级pip
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
-# 安装PyTorch (CPU版本，GPU版本见Dockerfile.ros2.gpu)
-RUN pip3 install --no-cache-dir \
-    torch==2.1.0 \
-    torchvision==0.16.0 \
-    torchaudio==2.1.0 \
-    --index-url https://download.pytorch.org/whl/cpu
-
 # 复制requirements文件
 COPY requirements.txt /tmp/requirements.txt
 

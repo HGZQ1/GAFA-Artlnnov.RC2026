@@ -1,588 +1,337 @@
-# RC2026 ROS2 视觉感知与决策系统 v4.0 说明文档
+# RC2026武林探秘 R2全自动机器人上位机系统🤖
 
-## 项目概览
+## 本项目由广州美术学院湾区创新学院Artlnnov战队算法组开源和维护
 
-本项目为 Robocon 2026 比赛 R2 机器人的上位机系统，基于 ROS2 Humble 构建，运行在 Jetson Orin NX 上。系统分为两个独立工作空间：
+  - **项目负责人**：刘卓轩（联系方式：18927743799/📫：HGZQ2108299415@outlook.com，不许闲的没事打电话给我）【R2唯一上位机】
+  - **副组长**：李嘉禾
 
-| 工作空间 | 用途 | 部署环境 |
-|----------|------|----------|
-| `ros2_ws` | 真机代码，包含感知、决策、导航、通信 | Jetson Orin NX |
-| `sim_ws` | Gazebo 仿真环境，用于离线调试 | 开发机 (x86 Ubuntu) |
+## 一、项目概览✨️
 
-坐标系采用 **game 坐标系**：原点在场地顶部中央，左半场 x<0，右半场 x>0，y 轴指向场地内部。左右半场关于 x=0 对称，右半场航点只需 x 取反。
+本项目为**Artlnnov战队**参加 Robocon 2026 比赛 R2 机器人的上位机系统，基于 ROS2 Humble 构建，运行在 AMD Ryzen 7 8845HS 小主机上。主要覆盖YOLO视觉处理、SLAM、导航、决策模块、全流程状态机、底盘与机械臂移动和动作、Gazebo仿真，以及与下位机之间的串口通信。
 
----
+> 该系统串口通信包使用**重庆大学开源的AutoSerialBridge项目**，仅修改protocol.yaml部分；以及仿真模型环境使用**重庆大学开源的RC2026 Gazebo Classic 仿真场地功能包**，已保留相应许可证，地图右半场点云由**华南理工大学robotic战队**提供，十分感谢开源作者的贡献。🙏🙏🙏
 
-# 一、ros2_ws（真机工作空间）
+相应的开源仓库地址如下：https://github.com/ConQU2026/rc2026_field.git
 
-## 1. 代码结构
-
-```
-ros2_ws/src/
-├── rc2026_bringup/          # 机器人启动与硬件配置
-│   ├── launch/
-│   │   ├── robot_bringup.launch.py    # 全系统启动 (传感器+视觉+决策)
-│   │   ├── navigation.launch.py       # 导航启动 (FAST-LIO+EKF+WaypointNav)
-│   │   └── sensor_only.launch.py      # 仅传感器 (调试用)
-│   ├── config/
-│   │   ├── MID360s_config.json        # Livox Mid-360S 网络配置
-│   │   ├── robot_params.yaml          # 机器人物理参数
-│   │   └── measurement_params.yaml    # 测量标定参数
-│   ├── map/
-│   │   ├── left_half.pgm/yaml         # 左半场2D地图 (备用)
-│   │   ├── right_half.pgm/yaml        # 右半场2D地图 (备用)
-│   │   └── field_waypoints.yaml       # 场地航点坐标
-│   └── urdf/                          # (真机URDF, 无Gazebo插件)
-│
-├── rc2026_navigation/       # 定位与导航
-│   ├── launch/
-│   │   └── fastlio.launch.py          # FAST-LIO + EKF + 轮式里程计
-│   ├── config/
-│   │   ├── fastlio2/
-│   │   │   ├── mapping.yaml           # FAST-LIO 建图参数
-│   │   │   └── localization.yaml      # FAST-LIO 定位参数
-│   │   └── ekf.yaml                   # robot_localization EKF 融合参数
-│   └── scripts/
-│       ├── save_cloud_map.py          # 保存点云地图
-│       └── pcd_to_gridmap.py          # 点云转栅格
-│
-├── decision_processor/      # 决策处理核心
-│   └── decision_processor/
-│       ├── config.py                  # 全局参数 (航点/台阶高度/动作ID)
-│       ├── game_controller.py         # 比赛全流程状态机
-│       ├── waypoint_navigator.py      # 闭环PID路径点导航器
-│       ├── processor_node.py          # 视觉伺服主节点
-│       ├── robot_decision.py          # 五状态视觉决策状态机
-│       ├── kalman_filter.py           # 2D卡尔曼滤波 (视觉目标平滑)
-│       ├── motion_planner.py          # 运动规划 (坡度感知)
-│       ├── meilin_path_planner.py     # 梅林BFS路径规划
-│       ├── meilin_navigator.py        # 梅林台阶间导航
-│       ├── tf_manager.py             # TF坐标变换管理
-│       ├── target_confirmation.py     # 目标确认 (多帧一致性)
-│       ├── imu_processor.py           # IMU数据处理/坡度检测
-│       ├── odometry_fusion.py         # 编码器+IMU简易融合 (备用)
-│       ├── mock_feedback_node.py      # 仿真用模拟反馈
-│       └── scenarios/
-│           ├── scenario_wuguan.py     # 武馆场景策略
-│           └── scenario_meilin.py     # 梅林场景策略
-│
-├── vision_detector/         # YOLO视觉检测
-│   └── vision_detector/
-│       ├── detector_node.py           # ROS2检测主节点 (支持模型热切换)
-│       ├── yolov8_detector.py         # YOLOv8推理封装
-│       ├── model_switcher.py          # 模型切换管理
-│       └── utils.py                   # 距离计算/像素转3D
-│
-├── cmd_vel_bridge/          # 速度指令桥接
-│   └── cmd_vel_bridge/
-│       ├── bridge_node.py             # /cmd_vel → /serial/chassis_cmd
-│       └── wheel_odom_publisher.py    # 编码器Twist → Odometry转换
-│
-├── auto_serial_bridge-main/ # 串口通信框架
-│   ├── config/
-│   │   └── protocol.yaml             # 串口协议定义 (所有Jetson↔STM32消息)
-│   └── launch/
-│       └── serial_bridge_by_node.launch.py
-│
-└── vision_msgs_custom/      # 自定义视觉消息类型
-```
-
-## 2. 各模块功能详解
-
-### 2.1 定位模块 — FAST-LIO + EKF 三源融合
-
-**文件**: `rc2026_navigation/launch/fastlio.launch.py`, `config/ekf.yaml`
-
-三个传感器数据源融合为一个高精度定位输出：
-
-```
-┌────────────────┐  ┌────────────────┐  ┌────────────────┐
-│ Livox Mid-360S │  │ Livox IMU      │  │ STM32 编码器    │
-│ 点云 10Hz      │  │ 角速度+加速度  │  │ 位置+速度 50Hz │
-│ /livox/lidar   │  │ 200Hz          │  │ /feedback/      │
-└───────┬────────┘  │ /livox/imu     │  │  wheel_odom    │
-        │           └───────┬────────┘  └───────┬────────┘
-        ▼                   │                   │
-   ┌─────────┐              │            ┌──────▼───────┐
-   │FAST-LIO2│◄─────────────┘            │wheel_odom_pub│
-   │激光+IMU │                           │Twist→Odometry│
-   │紧耦合   │                           └──────┬───────┘
-   └────┬────┘                                  │
-        │                                       │
-        ▼                                       ▼
-   /odom/lidar                             /odom/wheel
-   (Odometry)                              (Odometry)
-        │           /livox/imu                  │
-        │               │                      │
-        └───────────────┼──────────────────────┘
-                        ▼
-              ┌──────────────────┐
-              │ robot_localization│
-              │ EKF 卡尔曼融合   │
-              │                  │
-              │ odom0: 编码器    │ → 位置+速度 (高频)
-              │ odom1: FAST-LIO │ → 位置+航向 (高精度)
-              │ imu0:  IMU      │ → 角速度+加速度 (超高频)
-              └────────┬─────────┘
-                       │
-              ┌────────▼─────────┐
-              │ /odom (Odometry) │
-              │ TF: odom→base_link│
-              │ 50Hz, 融合精度   │
-              └──────────────────┘
-```
-
-**各数据源的贡献**:
-- **编码器**: 提供高频速度 (vx, vy, vyaw)，响应快但打滑会漂
-- **FAST-LIO**: 提供绝对位置 (x, y, yaw)，精度高但频率低
-- **IMU**: 提供角速度和线加速度，填补两帧之间的预测空档
-
-### 2.2 导航模块 — WaypointNavigator PID 闭环
-
-**文件**: `decision_processor/waypoint_navigator.py`
-
-替代 Nav2，直接 PID 控制全向底盘导航到目标点。
-
-**两阶段导航**:
-1. **PID 闭环** (粗到位 ~5cm): 读取 TF 位姿，对角线直达目标
-2. **视觉伺服** (精对齐 ~2cm, 可选): 相机识别目标，精确对齐
-
-**PID 导航算法** (每 50ms 执行一次):
-```
-输入: 目标 game 坐标 (target_x, target_y, target_yaw)
-      当前 game 坐标 (cur_x, cur_y, cur_yaw) ← 从 TF 读取并转换
-
-1. 计算位置误差 (game 坐标系):
-   ex = target_x - cur_x
-   ey = target_y - cur_y
-   dist = √(ex² + ey²)
-
-2. 计算速度大小 (P控制 + 减速区):
-   if dist > decel_distance:
-     speed = clamp(kp × dist, min_speed, max_speed)
-   else:
-     speed = max_speed × (dist / decel_distance)  ← 线性减速
-
-3. 计算世界坐标速度方向:
-   vx_world = (ex / dist) × speed    ← 指向目标的单位向量 × 速度
-   vy_world = (ey / dist) × speed
-
-4. 世界坐标 → 机器人体坐标 (旋转变换):
-   cmd.linear.x =  vx_world × cos(yaw) + vy_world × sin(yaw)
-   cmd.linear.y = -vx_world × sin(yaw) + vy_world × cos(yaw)
-
-5. 角速度控制:
-   cmd.angular.z = clamp(kp_ang × yaw_error, -max_ang, max_ang)
-
-6. 到达判定:
-   if dist ≤ 0.05m and |yaw_error| ≤ 0.1rad → ARRIVED
-```
-
-**坐标变换模式**:
-
-| 模式 | 公式 | 使用场景 |
-|------|------|----------|
-| `gazebo` | game_x=gz_y, game_y=-gz_x+6.0, yaw=gz_yaw-π/2 | Gazebo 仿真 |
-| `fastlio` | game = R(start_yaw)×loc + (start_x, start_y) | 真机 FAST-LIO |
-| `offset` | game = loc + offset | 简单偏移 |
-
-**超时保护** (分层):
-- 进度超时 (3s): 距离未减少 → 重试 (最多3次)
-- 路径点超时 (30s): 总时间超限 → 放大容差判定或放弃
-- 视觉伺服超时 (15s): 对齐超时 → 接受 PID 位置
-
-### 2.3 决策模块 — GameController 全流程状态机
-
-**文件**: `decision_processor/game_controller.py`
-
-武馆流程:
-```
-WAIT_INPUT → WAIT_START → NAV_TO_WEAPON → ALIGN_WEAPON →
-GRAB_WEAPON → NAV_TO_ASSEMBLY → WAIT_ASSEMBLY → RELEASE_WEAPON →
-WAIT_ENTER_MERLIN → NAV_TO_MERLIN_ENTRY → SWITCH_TO_MERLIN
-```
-
-梅林流程 (子状态机):
-```
-M_INIT → M_ENTRY_NAV → M_ENTRY_CLIMB →
-[M_ON_BLOCK → M_PICKUP_NAV → M_ALIGN_KFS → M_PICKUP_KFS →]
-M_NAV_TO_TRIGGER → M_SEND_CLIMB → M_CLIMB_WAIT →
-M_NAV_TO_CENTER → M_ON_BLOCK → ... →
-M_EXIT_NAV → M_EXIT_DESCEND → M_DONE → STOP
-```
-
-### 2.4 视觉模块 — YOLO 检测 + 视觉伺服
-
-**文件**: `vision_detector/detector_node.py`, `decision_processor/processor_node.py`
-
-```
-Intel D435i → /camera/color/image_raw
-                    │
-                    ▼
-            detector_node (YOLOv8)
-            模型: wuqi.pt (武馆) / kfs.pt (梅林)
-                    │
-                    ▼
-            /vision/raw_target (PointStamped)
-            frame_id = "class_id:name:confidence"
-            point = (cam_x, cam_y, distance)
-                    │
-                    ▼
-            processor_node (视觉伺服)
-            ├── TF 变换: camera→base_link
-            ├── 卡尔曼滤波: 平滑检测噪声
-            ├── robot_decision: 5状态机
-            │   SEARCHING→ALIGNING→MOVING→ARRIVED→PICKING
-            └── 发布 /serial/chassis_cmd (底盘微调指令)
-```
-
-### 2.5 通信模块 — 串口协议
-
-**文件**: `auto_serial_bridge-main/config/protocol.yaml`
-
-| 方向 | 消息 | ID | 话题 | 内容 |
-|------|------|----|------|------|
-| Jetson→STM32 | CmdVel | 0x01 | /serial/chassis_cmd | vx, vy, rotation_deg |
-| Jetson→STM32 | MeilinCmd | 0x04 | /serial/meilin_cmd | 台阶编号, 爬升模式 |
-| Jetson→STM32 | ActionGroupCmd | 0x09 | /serial/action_group_cmd | 动作组ID |
-| Jetson→STM32 | GameCmd | 0x08 | /game/cmd | 比赛指令 |
-| STM32→Jetson | WheelOdom | 0x25 | /feedback/wheel_odom | 位置+速度 (EKF用) |
-| STM32→Jetson | ActionGroupFeedback | 0x14 | /feedback/action_group | 动作完成状态 |
-| STM32→Jetson | AssemblyStatus | 0x11 | /feedback/assembly | 组装状态 |
-| STM32→Jetson | StartButton | 0x12 | /game/start_signal | 启动按钮 |
-| STM32→Jetson | R1Signal | 0x13 | /game/r1_signal | R1机器人信号 |
-| STM32→Jetson | GripperStatus | 0x10 | /feedback/gripper | 夹爪状态 |
-
-### 2.6 速度桥接模块
-
-**文件**: `cmd_vel_bridge/bridge_node.py`
-
-```
-waypoint_navigator          cmd_vel_bridge            STM32
-/cmd_vel (Twist)    →    限速 + rad/s→deg转换    →   /serial/chassis_cmd
-  vx m/s                  超时保护 (0.5s)            vx m/s
-  vy m/s                                             vy m/s
-  omega rad/s                                        rotation deg
-```
-
-## 3. 完整信息流 (传感器→底盘指令)
-
-```
-═══════════════════════════════════════════════════════════════
-                       传感器层
-═══════════════════════════════════════════════════════════════
-  Livox Mid-360S        STM32 编码器        Intel D435i
-  ├── /livox/lidar      /feedback/          /camera/color/
-  └── /livox/imu         wheel_odom          image_raw
-       │    │               │                    │
-═══════╪════╪═══════════════╪════════════════════╪════════════
-       │    │   定位层       │                    │  感知层
-═══════╪════╪═══════════════╪════════════════════╪════════════
-       ▼    │               ▼                    ▼
-   FAST-LIO │        wheel_odom_pub       detector_node
-   /odom/lidar              /odom/wheel    /vision/raw_target
-       │    │               │                    │
-       │    ▼               │                    │
-       │  EKF 数据源2       │                    │
-       │  (角速度+加速度)   │                    │
-       └────┬───────────────┘                    │
-            ▼                                    │
-    ┌──────────────┐                             │
-    │  EKF 融合    │                             │
-    │  /odom       │                             │
-    │  TF: odom→   │                             │
-    │   base_link  │                             │
-    └──────┬───────┘                             │
-           │                                     │
-═══════════╪═════════════════════════════════════╪════════════
-           │              决策层                  │
-═══════════╪═════════════════════════════════════╪════════════
-           │                                     │
-    static TF:                                   │
-    map→odom                                     │
-           │                                     │
-           ▼                                     │
-    TF: map→base_link                            │
-           │                                     │
-           ▼                                     ▼
-    waypoint_navigator ◄───── game_controller ◄── processor_node
-    (PID闭环导航)         NavigateToPose action   (视觉伺服)
-           │                                     │
-═══════════╪═════════════════════════════════════╪════════════
-           │              执行层                  │
-═══════════╪═════════════════════════════════════╪════════════
-           ▼                                     ▼
-       /cmd_vel                        /serial/chassis_cmd
-           │                           (视觉微调指令)
-           ▼                                     │
-    cmd_vel_bridge ───────────────────────────────┘
-    /serial/chassis_cmd (合并)
-           │
-           ▼
-    auto_serial_bridge
-    [0x5A,0xA5,0x01, vx, vy, rot, CRC8]
-           │
-           ▼
-        STM32 底盘控制器
-```
-
-## 4. 滤波与控制算法
-
-### 4.1 EKF (扩展卡尔曼滤波) — 底盘全局定位
-
-**位置**: `rc2026_navigation/config/ekf.yaml` (robot_localization 包)
-
-| 属性 | 值 |
-|------|-----|
-| 滤波对象 | 机器人自身位姿 (x, y, yaw, vx, vy, vyaw) |
-| 坐标系 | odom (全局) |
-| 输入 | 编码器位置+速度、FAST-LIO位置+航向、IMU角速度+加速度 |
-| 输出 | /odom + TF(odom→base_link) |
-| 频率 | 50Hz |
-| 作用 | 融合多源定位，提供稳定、高精度、高频率的位姿估计 |
-
-### 4.2 2D 卡尔曼滤波 — 视觉目标平滑
-
-**位置**: `decision_processor/kalman_filter.py`
-
-| 属性 | 值 |
-|------|-----|
-| 滤波对象 | 视觉检测到的目标位置 (base_link 相对坐标) |
-| 坐标系 | base_link (机器人体坐标) |
-| 输入 | 每帧相机检测的目标 (x, y) |
-| 输出 | 平滑后的目标位置 → robot_decision |
-| 频率 | 10-30Hz (跟随相机帧率) |
-| 作用 | 消除视觉检测抖动，防止底盘震荡 |
-
-附加功能: `is_valid_detection()` 跳变检测，单帧跳变 >0.8m 直接丢弃
-
-### 4.3 PID 控制 — 底盘运动
-
-**位置**: `decision_processor/waypoint_navigator.py`
-
-| 属性 | 值 |
-|------|-----|
-| 控制对象 | 底盘速度 (vx, vy, omega) |
-| 输入 | 位置误差 (ex, ey, e_yaw) 来自 TF |
-| 输出 | /cmd_vel (Twist) |
-| 频率 | 20Hz |
-| 类型 | P 控制 + 减速区 (接近目标时线性减速) |
-| 参数 | kp_linear=1.2, kp_angular=2.0, decel_distance=0.3m |
-
-## 5. TF 树
-
-```
-                    map
-                     │
-              (静态 identity)
-                     │
-                    odom
-                     │
-            (EKF: robot_localization)
-            (融合编码器+FAST-LIO+IMU)
-                     │
-                base_footprint
-                     │
-               (固定: z=wheel_radius)
-                     │
-                 base_link ──────────────────────────────────┐
-                  │    │    │    │                            │
-            (固定) (固定) (固定) (固定)                   (固定)
-              │      │      │      │                        │
-         camera_link  lidar_link  arm_base_link    wheel_fl/fr/rl/rr
-              │
-         (固定: -π/2旋转)
-              │
-       camera_optical_frame
-```
-
-## 6. 真机启动命令
-
-```bash
-# 完整导航 (FAST-LIO + EKF + WaypointNavigator)
-ros2 launch rc2026_bringup navigation.launch.py
-
-# 完整导航 + 比赛状态机
-ros2 launch rc2026_bringup navigation.launch.py use_game_controller:=true
-
-# 右半场 (x 取反)
-ros2 launch rc2026_bringup navigation.launch.py start_x:=1.4
-
-# 仅传感器 (调试)
-ros2 launch rc2026_bringup sensor_only.launch.py
-```
+https://github.com/ConQU2026/auto_serial_bridge.git
 
 ---
+**R2**是一台无人操控的**全自动机器人**，需要在比赛过程中完成：
+- 武馆区域：
+  - 识别武馆内相应位置的己方武器头，完成拾取；
+  - 移动到组合区域与拾取完成矛杆的R1进行武器组合；
+- 梅林区域：
+  - 识别梅林区域内的真KFS，完成拾取；
+  - 通过爬升和下降以及路径规划通过梅林台阶；
+- 对抗区域：
+  - 完成上坡进入对抗区域；
+  - 移动到九宫格前，并放置KFS至九宫格第二层；
+  - 到达合体区域与R1进行合体，并将KFS放置在九宫格最高层；
+---
+系统分为两个独立工作空间：`ros2_vision_project/ros2_ws` 为真机工作空间（实际运行环境，实际部署的部分），`ros2_vision_project/sim_ws` 为仿真工作空间。系统主入口为 `ros2_vision_project/scripts/launch_rc2026.py`，可交互式启动各个功能模块。
 
-# 二、sim_ws（仿真工作空间）
 
-## 1. 代码结构
+## 二、目录结构✨️
 
-```
-sim_ws/src/
-├── rc2026_sim/              # 仿真主包
-│   ├── launch/
-│   │   ├── simulation.launch.py       # 一键启动仿真
-│   │   └── waypoint_nav_sim.launch.py # 仿真导航配置
-│   ├── urdf/
-│   │   └── rc2026_robot_sim.urdf.xacro # 仿真URDF (含Gazebo插件)
-│   ├── map/                           # 地图文件 (备用)
-│   └── rc2026_sim/
-│       ├── __init__.py
-│       └── simple_teleop.py           # 简易键盘遥控
-│
-└── rc2026_field/            # 比赛场地包 (开源)
-    ├── worlds/
-    │   ├── robocon2026.world          # 基础场地
-    │   └── robocon2026_with_kfs.world # 含KFS方块场地
-    ├── config/
-    │   └── kfs_config.yaml            # KFS位置配置
-    ├── rc2026_field/
-    │   ├── kfs_manager.py             # KFS方块管理
-    │   └── field_gui.py               # 场地GUI
-    └── scripts/
-        └── random_kfs_*.py            # 随机KFS生成
+```text
+GAFA-Artlnnov.RC2026/
+     |-- README.md  # 项目说明文档
+     |-- ros2_vision_project/ # ROS2上位机系统（详细看内置文档）
+     └── 模型训练project/  # 模型训练项目
 ```
 
-## 2. 仿真模块功能
+## 三、硬件使用✨️
 
-### 2.1 Gazebo 插件 (URDF 内定义)
+| 硬件设备 | 用途 |
+| --- | --- |
+| Intel RealSense D435i | RGB-D 图像、武器头/KFS对齐、IMU 数据输入、R1R2合体检测ArUco |
+| Livox Mid-360S | 点云输入、激光惯性里程计、预建点云地图定位 |
+|外接USB相机| KFS精对齐|
+|红外学习模块| R1R2通信|
+| AMD Ryzen 7 8845HS 小主机 | 真机实际部署平台 |
 
-| 插件 | 功能 | 发布话题 |
-|------|------|----------|
-| `libgazebo_ros_planar_move.so` | 全向底盘驱动，订阅 /cmd_vel | /odom + TF(odom→base_footprint) |
-| `libgazebo_ros_camera.so` | RGB相机仿真 | /camera/camera/color/image_raw |
-| `libgazebo_ros_ray_sensor.so` (3D) | 360°点云 (16层) | /livox/lidar (PointCloud2) |
-| `libgazebo_ros_ray_sensor.so` (2D) | 2D激光扫描 | /scan (LaserScan) |
+## 四、技术栈✨️
 
-注: `frame_upper` 的 collision 已移除，防止激光雷达射线命中自身框架。
+| 层级 | 技术/工具 | 用途 |
+| --- | --- | --- |
+| 系统平台 | Ubuntu22.04 + ROS2 Humble | 上位机运行环境与节点通信框架 |
+| 计算平台 | AMD Ryzen 7 8845HS 小主机/Jetson orin nano 8GB | 真机实际部署平台，YOLO 当前使用 CPU 推理 |
+| 主要语言 | Python3.10、C++ | Python 用于视觉/决策/导航节点，C++ 用于串口桥底层 |
+| 视觉检测 | Ultralytics YOLOv8、OpenCV、cv_bridge | 武器头/KFS 目标检测、图像处理、调试可视化 |
+| RGB-D/IMU | Intel RealSense D435i、realsense2_camera | RGB-D 图像、相机内参、IMU 数据输入 |
+| 激光雷达定位 | Livox Mid-360S、livox_ros_driver2、FAST-LIO2 | 点云输入、激光惯性里程计、预建点云地图定位 |
+| 多源融合 | robot_localization EKF、TF2 | 融合 FAST-LIO、轮式里程计和 IMU，输出统一 TF |
+| 地图重定位 | Open3D ICP | 基于左右半场 PCD 地图修正 FAST-LIO 初始偏移和漂移 |
+| 导航控制 | 自研 WaypointNavigator、nav2_msgs Action 接口 | 兼容 `NavigateToPose`，实际执行 PID 路径点导航 |
+| 决策系统 | GameController 状态机、梅林 BFS 路径规划 | 编排武馆、梅林、对抗区、KFS 放置与合体流程 |
+| 精对齐 | USB 相机三棱检测、D435i ArUco 检测 | KFS 吸盘精对齐、R1 合体视觉对齐 |
+| 下位机通信 | AutoSerialBridge、UART、CRC8 协议 | 与 STM32 交换底盘速度、动作组、反馈、启动/R1 信号 |
+| 仿真 | Gazebo Classic、rc2026_field、rc2026_sim | 场地/KFS/机器人仿真、重定位与里程计漂移测试 |
 
-### 2.2 坐标变换 (Gazebo ↔ Game)
+## 五、核心算法模块（ros2_ws）✨️
 
-Gazebo 坐标系与 game 坐标系存在轴交换：
+| 类别 | 核心文件/模块 | 算法或机制 | 用途 |
+| --- | --- | --- | --- |
+| RGB-D 目标检测 | `vision_detector/vision_detector/detector_node.py`、`yolov8_detector.py` | YOLOv8 目标检测 + 模型热切换 | 识别武器头、真/假 KFS 等目标，并支持武馆模型与梅林 KFS 模型运行时切换 |
+| 深度测距与三维反投影 | `vision_detector/vision_detector/utils.py` | 深度图采样、像素坐标转相机三维坐标 | 从检测框中心和 D435i 深度图计算目标相对相机的三维位置，发布 `/vision/raw_target` |
+| 视觉伺服状态机 | `decision_processor/decision_processor/processor_node.py`、`robot_decision.py` | SEARCHING/ALIGNING/MOVING/ARRIVED/PICKING 状态机 | 在 `ALIGN_WEAPON` 和 `ALIGN_KFS` 阶段根据目标偏角与距离输出底盘微调指令 |
+| 视觉目标滤波 | `decision_processor/decision_processor/kalman_filter.py` | 二维卡尔曼滤波 + 单帧跳变剔除 | 平滑视觉目标在 `base_link` 下的位置，降低检测抖动导致的底盘震荡 |
+| 目标确认 | `decision_processor/decision_processor/target_confirmation.py` | 多帧确认、连续丢失判定 | 防止单帧误检直接触发对齐/抓取，提升视觉状态机稳定性 |
+| 场景策略 | `decision_processor/decision_processor/scenarios/scenario_wuguan.py`、`scenario_meilin.py` | 类别、置信度、距离规则评估 | 武馆场景判断可拾取武器头；梅林场景区分 REAL/FAKE/R1 KFS 并决定拾取或忽略 |
+| 路径点导航 | `decision_processor/decision_processor/waypoint_navigator.py` | 自研 PID 路径点导航 + `NavigateToPose` Action 兼容层 | 替代 Nav2 controller，读取 TF 位姿后执行 XY 到位、yaw-only 原地转向和可选视觉伺服交接 |
+| 坐标变换 | `decision_processor/decision_processor/tf_manager.py`、`waypoint_navigator.py` | camera/base/arm TF 转换，game/gazebo/fastlio 坐标换算 | 统一视觉、机械臂、导航和比赛场地坐标，支持左右半场与仿真坐标转换 |
+| 梅林路径规划 | `decision_processor/decision_processor/meilin_path_planner.py` | 3x4 方块有向 BFS + KFS 覆盖约束 + 假 KFS 障碍 | 根据真/假 KFS 输入规划可通行路径，生成入口、拾取点、爬升/下降触发点 |
+| 比赛总控 | `decision_processor/decision_processor/game_controller.py` | 全流程有限状态机 + 子模式调度 | 编排武馆、梅林、对抗区、KFS 放置、R1 合体和超时保护，是比赛流程调度核心 |
+| IMU 姿态与坡度识别 | `decision_processor/decision_processor/imu_processor.py` | 互补滤波、坡度等级分类 | 融合 D435i gyro/accel 得到 pitch/roll/yaw_rate，为爬坡退出和坡度感知控制提供依据 |
+| 坡度感知运动规划 | `decision_processor/decision_processor/motion_planner.py` | 距离/角度控制、坡度速度系数、梯形速度规划 | 为视觉伺服接近目标和坡面运动提供速度规划基础 |
+| KFS 精对齐 | `decision_processor/decision_processor/fine_align_node.py` | LAB 滤色、边缘检测、Hough 竖线、两棱/三棱判定、两级减速 | 使用机械臂末端 USB 相机判断 KFS 是否居中，输出横向微调速度给底盘 |
+| 合体视觉对齐 | `decision_processor/decision_processor/dock_align_node.py` | ArUco 检测、solvePnP 位姿估计、三轴比例控制、滑动窗口确认 | 在对抗区识别 R1 标志，控制 R2 横向、前后和偏航完成合体前对齐 |
+| 地图重定位 | `rc2026_navigation/scripts/map_relocalizer.py` | Open3D 点到面 ICP + 在线参数更新 | 将 FAST-LIO 当前点云与左/右半场 PCD 地图匹配，修正导航初始偏移和区域漂移 |
+| 点云地图工具 | `rc2026_navigation/scripts/save_cloud_map.py`、`pcd_to_gridmap.py`、`generate_field_map.py` | 点云保存、PCD 栅格化、场地地图生成 | 生成和维护定位/导航所需的点云地图与二维地图资源 |
+| 多源速度仲裁 | `cmd_vel_bridge/cmd_vel_bridge/bridge_node.py` | fine_align > dock_align > cmd_vel 优先级仲裁、限幅、rad/s 到 deg/s 转换 | 统一普通导航、KFS 精对齐和合体对齐的底盘速度输出，最终发布 `/serial/chassis_cmd` |
+| 轮式里程计转换 | `cmd_vel_bridge/cmd_vel_bridge/wheel_odom_publisher.py` | STM32 Twist 反馈到 `nav_msgs/Odometry` 转换 | 将 `/feedback/wheel_odom` 转为 `/odom/wheel`，供 EKF 融合定位使用 |
 
-```
-Gazebo +x = Game -y      Game +x = Gazebo +y
-Gazebo +y = Game +x      Game +y = Gazebo -x
-Gazebo +z = Game +z      (z轴相同)
+### 使用的开源算法与库
 
-公式:
-  game_x = gz_y
-  game_y = -gz_x + 6.0
-  game_yaw = gz_yaw - π/2
+| 开源算法/库 | 在项目中的使用位置 | 具体用途 |
+| --- | --- | --- |
+| **YOLOv8 / Ultralytics** | `vision_detector` | 目标检测模型，用于识别武器头、真 KFS、假 KFS 和 R1 相关目标；当前在 AMD 8845HS 小主机上使用 CPU 推理 |
+| **OpenCV** | `fine_align_node.py`、`dock_align_node.py`、`triple_edge_align.py` | 图像采集、颜色空间转换、形态学处理、Canny 边缘检测、HoughLinesP 直线检测和调试显示 |
+| **ArUco** | `dock_align_node.py` | 基于 OpenCV ArUco 模块检测 R1 上的标志，结合 `solvePnP` 估计标志相对相机的位姿，为合体视觉伺服提供横向、距离和偏航误差 |
+| **FAST-LIO2** | `rc2026_navigation`、`fast_lio` | 激光雷达与 IMU 紧耦合激光惯性里程计，输出实时点云配准和机器人位姿 |
+| **Extended Kalman Filter（EKF）** | `robot_localization` + `config/ekf.yaml` | 融合 FAST-LIO、STM32 轮式里程计和 IMU，输出 `/odom` 以及 `odom -> base_link` TF |
+| **Open3D ICP** | `map_relocalizer.py` | 将实时 `/cloud_registered` 点云与左右半场 PCD 地图进行点到面 ICP 匹配，修正初始定位偏移和运行过程中的 SLAM 漂移 |
+| **TF2** | `tf2_ros`、`tf_manager.py` | 管理 `map`、`odom`、`base_link`、相机、雷达和机械臂坐标系之间的变换 |
+| **Nav2 NavigateToPose Action** | `waypoint_navigator.py`、`game_controller.py` | 使用 Nav2 标准 Action 消息作为导航接口；实际路径执行由项目自研 WaypointNavigator 完成，不依赖 Nav2 controller |
+| **Gazebo Classic ROS** | `sim_ws/rc2026_sim`、`rc2026_field` | 仿真全向底盘、RGB 相机、3D/2D 激光雷达、场地和 KFS 模型 |
+| **cv_bridge** | `vision_detector`、`dock_align_node.py` | ROS `sensor_msgs/Image` 与 OpenCV `numpy` 图像之间的转换 |
+| **AutoSerialBridge** | `auto_serial_bridge-main` | 基于开源串口桥框架实现 ROS2 与 STM32 之间的协议解析、CRC8 校验、心跳和消息收发 |
 
-逆变换:
-  gz_x = 6.0 - game_y
-  gz_y = game_x
-  gz_yaw = game_yaw + π/2
+### 项目自研算法
 
-验证 (左半场启动点):
-  Gazebo (5.6, -1.4, yaw=π) → Game (-1.4, 0.4, yaw=π/2) ✓
-```
+- **WaypointNavigator PID 导航**：读取 TF 位姿，在 game 坐标系下执行 XY 平移、yaw-only 原地转向和视觉伺服交接。
+- **梅林有向 BFS 路径规划**：结合真/假 KFS 分布、方块高度和不可后退规则规划可行路径。
+- **二维目标卡尔曼滤波与多帧确认**：对视觉目标位置进行平滑，并通过连续帧确认/丢失判定抑制误检。
+- **互补滤波坡度估计**：融合 D435i 加速度计和陀螺仪，计算 pitch、roll、yaw rate 及坡度等级。
+- **KFS 三棱精对齐算法**：基于 OpenCV 色彩分割、边缘和棱线检测，计算透视误差与横向居中误差。
+- **比赛总控有限状态机**：编排武馆、梅林、对抗区、KFS 放置、R1 合体和超时保护等比赛阶段。
 
-支持两种坐标模式切换测试:
-- `coord_mode=gazebo`: 直接轴交换 (默认)
-- `coord_mode=fastlio`: 模拟真机 FAST-LIO 模式 (机器人从 0,0,0 开始)
+## 六、系统架构链路✨️
 
-### 2.3 mock_feedback_node (仿真反馈模拟)
+推荐启动链路：
 
-模拟真机上不存在的硬件反馈：
-
-| 模拟功能 | 触发条件 | 延时 |
-|----------|---------|------|
-| 视觉对齐完成 | game_phase=ALIGN_WEAPON/ALIGN_KFS | 1.5s |
-| 动作组执行完成 | 收到 /serial/action_group_cmd | 1.5s |
-| 组装完成 | game_phase=WAIT_ASSEMBLY | 2.0s |
-| R1进入梅林信号 | game_phase=WAIT_ENTER_MERLIN | 2.0s |
-| 梅林爬升瞬移 | 收到 /serial/meilin_cmd | 即时 (Gazebo teleport) |
-
-梅林爬升瞬移: 通过 Gazebo `/set_entity_state` 服务，将机器人瞬移到目标台阶的正确高度。
-
-### 2.4 仿真信息流
-
-```
-═══════════════════════════════════════════════════════════════
-                    Gazebo 物理仿真
-═══════════════════════════════════════════════════════════════
-  planar_move 插件              ray_sensor 插件
-  订阅 /cmd_vel                 发布 /livox/lidar, /scan
-  发布 /odom                    camera 插件
-  发布 TF: odom→base_footprint  发布 /camera/.../image_raw
-       │
-═══════╪══════════════════════════════════════════════════════
-       │              TF 层
-═══════╪══════════════════════════════════════════════════════
-       │
-  static TF: map→odom
-  (gazebo模式: identity)
-  (fastlio模式: 抵消出生位姿)
-       │
-       ▼
-  TF: map→base_link
-       │
-═══════╪══════════════════════════════════════════════════════
-       │              导航层 (与真机共用代码)
-═══════╪══════════════════════════════════════════════════════
-       ▼
-  waypoint_navigator        game_controller      mock_feedback
-  (PID闭环, 坐标变换)      (比赛状态机)         (模拟STM32反馈)
-       │                         │                    │
-       ▼                         │                    │
-   /cmd_vel ──────────────────────────────────────────┘
-       │                                         (梅林瞬移:
-       ▼                                          set_entity_state)
-  Gazebo planar_move
-  (机器人移动)
+```text
+scripts/launch_rc2026.py
+  -> rc2026_bringup/full_system.launch.py
+  -> 传感器 + 定位 + 视觉 + 决策 + 导航 + 串口通信
 ```
 
-## 3. 仿真启动命令
+真机运行主链路：
 
+```text
+传感器层
+  D435i RGB-D/IMU
+  Livox Mid-360S
+  STM32 轮式里程计
+  USB 精对齐相机
+  红外学习模块
+
+定位层
+  Livox 点云/IMU -> FAST-LIO2 -> /cloud_registered
+  STM32 wheel odom -> wheel_odom_publisher -> /odom/wheel
+  FAST-LIO + wheel odom + IMU -> robot_localization EKF -> /odom + TF
+  map_relocalizer -> Open3D ICP -> 更新 waypoint_navigator loc_offset
+
+感知层
+  D435i RGB-D -> YOLOv8 CPU 推理 -> /vision/raw_target
+  USB 相机 -> fine_align_node -> /fine_align/cmd/status
+  D435i ArUco -> dock_align_node -> /dock_align/cmd/status
+
+决策层
+  game_controller
+    -> 发布 /game/phase 控制视觉伺服阶段
+    -> 调用 navigate_to_pose 调度路径点导航
+    -> 发布 /vision/switch_model 切换武馆/KFS模型
+    -> 发布 /serial/action_group_cmd、/serial/meilin_cmd、/serial/confront_climb_cmd
+
+导航与控制层
+  waypoint_navigator -> /cmd_vel
+  processor_node -> /serial/chassis_cmd
+  fine_align_node / dock_align_node -> cmd_vel_bridge
+  cmd_vel_bridge -> 多源速度优先级仲裁 -> /serial/chassis_cmd
+
+执行层
+  auto_serial_bridge -> UART -> STM32
+  STM32 -> 底盘/机械臂/爬升机构
+  STM32反馈 -> /feedback/*、/game/start_signal、/game/r1_signal
+```
+
+核心流程可以概括为：交互脚本收集比赛参数，`GameController` 负责全流程状态机，`WaypointNavigator` 负责全局路径点移动，`processor_node`、`fine_align_node` 和 `dock_align_node` 负责不同阶段的视觉伺服，最终所有底盘/动作指令通过串口桥发送给 STM32 执行。
+
+## 七、系统时序✨️
+![时序图](/ros2_vision_project/GAFA-Artlnnov.RC2026-main_2026-08-03T11_17_24.474Z.png)
+
+## 八、完整的TF树✨️
+![TF树](/ros2_vision_project/frames_2026-06-14_17.52.22.pdf)
+
+## 九、Git克隆项目和运行✨️
+系统：Ubuntu 22.04 LTS (不会装ubuntu的自己看[这个](ros2_vision_project/视觉组教程/)，或者自己退队吧，我已经不想再帮任何人装系统了，这一年给我装燃尽了)
+
+请确保已安装 **ROS2 Humble**、**Python3.10（这个自带的）**、**C++编译器** 。
+
+或者直接使用本项目提供的 Docker 镜像运行，配置教程见 [配置指南](/ros2_vision_project/docker/docker配置指南.md)。个人建议如果是新手，直接使用 Docker 镜像运行，避免环境配置问题。
+
+### 接线
+1. 我这里**红外学习模块**和**下位机UART通信**均用的CH340 USB转TTL模块，红外学习模块接收端的TXD接CH340的RXD，RXD接CH340的TXD，GND接GND，**VCC接VCC**。下位机UART通信的TXD接CH340的RXD，RXD接CH340的TXD，GND接GND，**VCC不接**。
+2. 先接上UART通信模块，到USB主机口，再接两个红外学习模块[***因为我为了方便管理这几个接CH340的东西于是默认UART通信占的USB0口，红外学习模块分别占USB1,2口***]。
+3. 然后接上USB相机，深度相机和激光雷达，雷达接LAN口，供电接下位机（这步无先后之分）。
+
+### 安装上位机系统和启动
 ```bash
-# 纯导航测试 (手动发目标)
-ros2 launch rc2026_sim simulation.launch.py
+# 1. 加载 ROS2 Humble
+source /opt/ros/humble/setup.bash
 
-# 完整比赛流程
+# 2. 从GitHub克隆项目到本地
+cd "$HOME"  #或者自己喜欢放哪就cd到哪
+git clone https://github.com/GAFA-Artlnnov/GAFA-Artlnnov.RC2026-main.git
+
+
+# 3. 安装依赖
+cd "$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project" && bash docker/install_host_deps.sh
+
+#注意：Librealsense SDK驱动、MID-360S雷达驱动、livox_ros_driver2、fast_lio2需要自行下载安装和配置(放到后面了，解压即可)
+
+# 4. 启动系统
+cd "$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws"
+colcon build --symlink-install  #构建全部
+#如果构建失败就单独构建失败的包，如果是串口通信包构建失败则阅读根据串口通信包的README.md进行构建
+
+cd "$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project"
+source ros2_ws/install/setup.bash
+python3 scripts/launch_rc2026.py  #启动系统交互程序
+
+# 5.启动底盘运动（另开一个终端执行，如果没有遥控器的话）
+ros2 topic pub --once /game/start_signal std_msgs/msg/UInt8 '{data: 1}'
+
+``` 
+Librealsense SDK：https://github.com/realsenseai/librealsense/blob/master/doc/installation.md 
+
+MID-360S雷达驱动、livox_ros_driver2、fast_lio2：[MID-360S的开发资料.zip](ros2_vision_project/MID-360S的开发资料.zip) 
+
+
+**常见问题**：
+| 问题 | 解决方案 |
+| --- | --- |
+构建失败，提示找不到某些依赖包 | 先看看该包是否存在，或者检查当下路径是否是在正确的目录（ros2_vision_project/ros2_ws）下 |
+|构建失败，某个包单独构建失败|重新单独构建该包，colcon build --symlink-install --packages-select vision_detector vision_detector /colcon build --symlink-install --packages-select decision_processor decision_processor /colcon build --symlink-install --packages-select vision_msgs_custom vision_msgs_custom|
+|构建失败，提示串口通信包构建失败|请阅读串口通信包的README.md，按照里面的步骤进行构建|
+|构建失败，提示构建decision_processor时环境错误|```export AMENT_PREFIX_PATH=$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/install/decision_processor:$AMENT_PREFIX_PATH && export PYTHONPATH=$HOME/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/install/decision_processor/lib/python3.10/site-packages:$PYTHONPATH```
+|如果是在docker中运行，构建失败，原因跟上面一样|```export AMENT_PREFIX_PATH=/ros2_vision_project/ros2_ws/install_docker/decision_processor:$AMENT_PREFIX_PATH  && export PYTHONPATH=/ros2_vision_project/ros2_ws/install_docker/decision_processor/lib/python3.10/site-packages:$PYTHONPATH```|
+|有时colonel build会报错|可能是因为之前的构建文件残留导致的，可以尝试清理构建文件后重新构建：```rm -rf build/ install/ log/```|
+|缺少依赖|直接把报错扔给AI就知道缺什么了|
+### 注意：用docker运行的话，需要修改以下路径：
+
+1. full_system.launch.py中找到WEIGHTS_DIR直接修改为：WEIGHTS_DIR = ‘/ros2_vision_project/ros2_ws/src/vision_detector/weights‘
+2.  ros2_ws/src/vision_detector/vision_detector/model_switcher.py中找到WEIGHTS_DIR直接修改为：WEIGHTS_DIR = ‘/ros2_vision_project/ros2_ws/src/vision_detector/weights‘
+
+### 一些可能要用的命令
+```bash
+# 查看检测视觉结果
+source install/setup.bash
+ros2 run rqt_image_view rqt_image_view #查看相机图像，可在界面选择查看color/image_raw、depth/image_rect_raw、detector/image_raw等图像
+ros2 topic echo /detections #查看检测结果
+
+# 手动模型切换：
+ros2 run vision_detector model_switcher
+#按回车，然后输入模型名字如yolov8n,best,回车确认切换（默认best.pt）切换不了可能是模型损坏或者路径错误，检查模型文件是否存在，路径是否正确，模型文件是否完整。
+
+# 决策状态
+ros2 topic echo /decision/state
+
+# 底盘指令
+ros2 topic echo /serial/chassis_cmd
+
+# 视觉帧率
+ros2 topic hz   /vision/raw_target
+#==================================================================================================================
+
+#ssh连接主机测试（一般调车用）
+ssh hgzq123@192.XXX.XX.X  #后面是主机IP,用ifconfig查看当前ip地址)
+docker exec -it <docker的容器名> bash  #进入容器（用docker才需要）
+cd /ros2_vision_project/ros2_ws
+source install/setup.bash
+#===================================================================================================================
+
+#建图：
+#终端 1 — 启动 Livox Mid-360S 雷达驱动：
+source /opt/ros/humble/setup.bash
+source ~/livox_ros_driver2/install/setup.bash
+ros2 launch livox_ros_driver2 msg_MID360s_launch.py
+
+#终端 2 — 启动 FAST-LIO：
+source /opt/ros/humble/setup.bash
+source ~/FAST_LIO/install/setup.bash
+ros2 launch fast_lio mapping.launch.py config_file:=mid360.yaml
+
+#终端 3 — RViz 查看实时建图：
+rviz2
+#Fixed Frame 设为 camera_init
+#添加 PointCloud2 显示，topic: /cloud_registered
+#手持/推动机器人慢速绕场地走一圈（速度 < 1m/s，转弯尽量平滑）
+#终端 4 — 建图完成后保存 PCD：
+#FAST-LIO 默认将 PCD 保存到 ~/.ros/scans/ 或 PCD/ 目录。确认 pcd_save_en: true 已启用（在 mid360.yaml 中）。建图结束后 Ctrl+C 停止 FAST-LIO，它会自动保存 scans.pcd。
+source /opt/ros/humble/setup.bash
+python3 ~/GAFA-Artlnnov.RC2026-main/ros2_vision_project/ros2_ws/src/rc2026_navigation/scripts/save_cloud_map.py \
+    --duration 60 \
+    --output ~/FAST_LIO/PCD/scans.pcd
+
+
+#===================================================================================================================
+
+#仿真：
+#终端 1 — 启动仿真包：
+cd ~/GAFA-Artlnnov.RC2026-main/ros2_vision_project/sim_ws
+source install/setup.bash
 ros2 launch rc2026_sim simulation.launch.py use_game_controller:=true
+#右半场：
+ros2 launch rc2026_sim simulation.launch.py field_side:=right use_game_controller:=true
 
-# 测试 fastlio 坐标模式
-ros2 launch rc2026_sim simulation.launch.py coord_mode:=fastlio
+#终端 2 — 自定义真假kfs标签：
+ros2 topic pub --once /game/kfs_input std_msgs/String "data: 'real:3,8 fake:1,6'"
 
-# 手动发送导航目标 (game 坐标)
-ros2 topic pub --once /waypoint_nav/goal_pose geometry_msgs/PoseStamped \
-  "{pose: {position: {x: -0.65, y: 1.55}, orientation: {w: 1.0}}}"
+#终端 3 — 开始启动：
+ros2 topic pub --once /game/start_signal std_msgs/msg/UInt8 '{data: 1}'
 
-# 手动发送 KFS 配置 + 启动信号
-ros2 topic pub --once /game/kfs_input std_msgs/String "data: 'real:5,8 fake:2,6'"
-ros2 topic pub --once /game/start_signal std_msgs/UInt8 "data: 1"
 
-# 监控
-ros2 topic echo /game/phase          # 比赛阶段
-ros2 topic echo /waypoint_nav/status # 导航状态
-ros2 run tf2_ros tf2_echo map base_link  # 机器人位置
+#===================================================================================================================
+
+# 1. 启动信号（替代物理按钮）
+ros2 topic pub --once /game/start_signal std_msgs/msg/UInt8 '{data: 1}'
+
+# 2. R1 组装完成信号（模拟R1通知R2武器端头已组装好）
+#    game_controller 在 WAIT_ASSEMBLY 阶段等这个
+ros2 topic pub --once /feedback/assembly std_msgs/msg/UInt8 '{data: 2}'
+rf
+# 3. R1 进入梅林信号（模拟R1通知R2可以进梅林了）
+#    game_controller 在 WAIT_ENTER_MERLIN 阶段等这个
+ros2 topic pub --once /game/r1_signal std_msgs/msg/UInt8 '{data: 2}'
+
+# 4. R1 合体指令（模拟R1通知R2可以合体）
+#    game_controller 在 WAIT_MERGE 阶段等这个
+ros2 topic pub --once /game/r1_signal std_msgs/msg/UInt8 '{data: 3}'
+
 ```
 
----
+## 十、许可✨️
 
-# 三、关键话题汇总
+本项目自研部分采用 MIT License 开源，详见 [LICENSE](./LICENSE)。
 
-| 话题 | 类型 | 发布者 | 订阅者 | 用途 |
-|------|------|--------|--------|------|
-| `/cmd_vel` | Twist | waypoint_navigator | cmd_vel_bridge / Gazebo | 底盘速度指令 |
-| `/serial/chassis_cmd` | Twist | cmd_vel_bridge / processor_node | auto_serial_bridge | STM32底盘指令 |
-| `/odom` | Odometry | EKF / Gazebo | (TF发布) | 融合里程计 |
-| `/odom/lidar` | Odometry | FAST-LIO | EKF | 激光里程计 |
-| `/odom/wheel` | Odometry | wheel_odom_publisher | EKF | 轮式里程计 |
-| `/livox/lidar` | PointCloud2 | Livox驱动 / Gazebo | FAST-LIO | 点云数据 |
-| `/livox/imu` | Imu | Livox驱动 | FAST-LIO / EKF | IMU数据 |
-| `/vision/raw_target` | PointStamped | detector_node | processor_node | 视觉检测目标 |
-| `/game/phase` | String | game_controller | processor_node / mock_feedback | 比赛阶段 |
-| `/decision/state_id` | Int8 | processor_node / mock_feedback | waypoint_navigator / game_controller | 视觉对齐状态 |
-| `/waypoint_nav/status` | String | waypoint_navigator | (监控) | 导航状态 |
-| `/waypoint_nav/goal_pose` | PoseStamped | (手动) | waypoint_navigator | 导航目标 |
-| `/waypoint_nav/servo_phase` | String | (手动/game_controller) | waypoint_navigator | 视觉伺服阶段 |
-| `/feedback/wheel_odom` | Twist | auto_serial_bridge | wheel_odom_publisher | 编码器原始数据 |
-| `/feedback/action_group` | UInt8 | auto_serial_bridge / mock | game_controller | 动作完成反馈 |
-| `/feedback/assembly` | UInt8 | auto_serial_bridge / mock | game_controller | 组装状态 |
-| `/game/start_signal` | UInt8 | auto_serial_bridge / mock | game_controller | 启动信号 |
-| `/game/r1_signal` | UInt8 | auto_serial_bridge / mock | game_controller | R1通信信号 |
-| `navigate_to_pose` | Action | game_controller | waypoint_navigator | 导航目标 (Action) |
+项目中的第三方组件保留各自原始许可证声明，使用、修改和分发时请同时遵守对应子项目的许可条款。
+
+--- 
+
+2026是我参加RC的第一年，很高兴在这个学校有志同道合的同学跟我一起完成这个比赛，同时也取到了不错的成绩，今年是我们从0到1的开始，很感谢其他学校在这一年给我们给予的帮助和指导，希望在更往后的未来我们的后继团队有机会拿到更好的成绩，如果可以...我还想打RM喵~ 
+
+呜呜呜，写的代码太💩了，大佬们轻点喷，如果可以，请给我提issues，我会很感激的，谢谢喵~
+
+**致Artlnnov：同心笃行，百挫弥坚；虽千万人，吾往矣🚀**
