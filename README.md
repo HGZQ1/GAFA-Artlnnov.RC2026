@@ -37,7 +37,7 @@ https://github.com/ConQU2026/auto_serial_bridge.git
 GAFA-Artlnnov.RC2026/
      |-- README.md  # 项目说明文档
      |-- ros2_vision_project/ # ROS2上位机系统（详细看内置文档）
-     └── 模型训练project/  # 模型训练项目
+     └── LICENSE  # MIT开源协议
 ```
 
 ## 三、硬件使用✨️
@@ -216,8 +216,10 @@ ros2 topic pub --once /game/start_signal std_msgs/msg/UInt8 '{data: 1}'
 ``` 
 Librealsense SDK：https://github.com/realsenseai/librealsense/blob/master/doc/installation.md 
 
-MID-360S雷达驱动、livox_ros_driver2、fast_lio2：[MID-360S的开发资料.zip](ros2_vision_project/MID-360S的开发资料.zip) 
-
+MID-360S雷达驱动、livox_ros_driver2、fast_lio2：``` 
+通过网盘分享的文件：MID-360S的开发资料.zip
+链接: https://pan.baidu.com/s/17kniBEgbBarZjtuvZPW9-Q 提取码: geak  ```
+**内部的livox_ros_driver2和fast_lio2的mid-360s参数文件是经过我修改的** 
 
 **常见问题**：
 | 问题 | 解决方案 |
